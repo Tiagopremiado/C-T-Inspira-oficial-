@@ -1,0 +1,6 @@
+{
+  "name": "Centro de Treinamento Inspira",
+  "description": "Plataforma do Centro de Treinamento Inspira com Landing Page, Área do Comando Geral e Ficha de Cadastro Completa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
