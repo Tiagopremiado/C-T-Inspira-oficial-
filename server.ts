@@ -4,7 +4,6 @@ import fs from 'fs';
 import crypto from 'crypto';
 import multer from 'multer';
 import cookieParser from 'cookie-parser';
-import { createServer as createViteServer } from 'vite';
 import { db, hashPassword, verifyPassword } from './server/db.js';
 import { dataService } from './server/dataService.js';
 import { isSupabaseConfigured, testSupabaseConnection, getSupabase } from './server/supabase.js';
@@ -729,6 +728,7 @@ app.use((req, res, next) => {
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
