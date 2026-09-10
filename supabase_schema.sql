@@ -88,11 +88,13 @@ CREATE INDEX IF NOT EXISTS idx_admin_username ON public.admin_users(username);
 INSERT INTO public.admin_users (username, password_hash, salt, created_at)
 VALUES (
   'comando',
-  '7361ab68ceac8368fbcefaae29f27c3ff5c13b357f86fb6dc02cfbe9c4b7eaee3631f4df12a76dc82fb8f3956bf1a7509f6e3c0c05f7faad06d3fc29b7194f4c',
+  'a999ad223f0e4b7d5374f16313384f5cc0389c0cb1181ea91423733d7b348188151da72978fe11d1aebd5ec5c6c7fafe5ade2ac17f33039653529a4a43ad4f0c',
   'e29a998cb729c1b747065f4df3f545a1',
   NOW()
 )
-ON CONFLICT (username) DO NOTHING;
+ON CONFLICT (username) DO UPDATE SET 
+  password_hash = EXCLUDED.password_hash, 
+  salt = EXCLUDED.salt;
 
 -- 7. CONFIGURAÇÃO DE POLÍTICAS DE ACESSO (RLS - Row Level Security)
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
