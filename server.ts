@@ -17,7 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Multer storage for secure medical reports (laudos)
-const uploadsDir = path.join(process.cwd(), 'uploads', 'laudos');
+const isVercel = Boolean(process.env.VERCEL);
+const uploadsDir = isVercel ? path.join('/tmp', 'uploads', 'laudos') : path.join(process.cwd(), 'uploads', 'laudos');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -605,4 +606,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

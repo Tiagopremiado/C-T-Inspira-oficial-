@@ -97,17 +97,29 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response (e.g. 404/500 HTML from Vercel)
+      }
+
       if (!res.ok) {
+        if (!data) {
+          if (res.status === 404) {
+            throw new Error('Servidor da API não encontrado (404). Verifique as variáveis de ambiente na Vercel e o arquivo vercel.json.');
+          }
+          throw new Error(`Falha de comunicação com o servidor (Status HTTP ${res.status}).`);
+        }
         throw new Error(data.error || 'Usuário ou senha inválidos.');
       }
 
-      if (data.token) {
+      if (data?.token) {
         localStorage.setItem('inspira_auth_token', data.token);
       }
       setIsAuthenticated(true);
-      setToken(data.token);
-      loadCadastros(data.token);
+      setToken(data?.token || '');
+      loadCadastros(data?.token);
     } catch (err: any) {
       setLoginError(err.message || 'Erro ao efetuar login.');
     } finally {
@@ -363,9 +375,15 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
         body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Erro ao alterar senha.');
+        throw new Error(data?.error || `Erro ao alterar senha (${res.status}).`);
       }
 
       setPassMsg({ type: 'success', text: 'Senha alterada com sucesso!' });
