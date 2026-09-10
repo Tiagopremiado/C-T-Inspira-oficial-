@@ -14,6 +14,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Data state
   const [cadastros, setCadastros] = useState<PreCadastro[]>([]);
@@ -43,6 +44,12 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   useEffect(() => {
     checkAuth();
     fetchConfig();
+    
+    const savedUsername = localStorage.getItem('inspira_saved_username');
+    if (savedUsername) {
+      setUsername(savedUsername);
+      setRememberMe(true);
+    }
   }, []);
 
   const fetchConfig = async () => {
@@ -117,6 +124,13 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
       if (data?.token) {
         localStorage.setItem('inspira_auth_token', data.token);
       }
+      
+      if (rememberMe) {
+        localStorage.setItem('inspira_saved_username', username);
+      } else {
+        localStorage.removeItem('inspira_saved_username');
+      }
+
       setIsAuthenticated(true);
       setToken(data?.token || '');
       loadCadastros(data?.token);
@@ -504,8 +518,30 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                   placeholder="••••••••"
                   className="w-full min-h-[50px] rounded-xl border border-[rgba(255,255,255,0.10)] bg-[rgba(255,255,255,0.04)] text-white px-3.5 focus:border-[#f5c33b] focus:outline-none transition"
                 />
-                
     </div>
+
+              <div className="flex items-center justify-between mb-6">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${rememberMe ? 'bg-[#f5c33b] border-[#f5c33b]' : 'border-[rgba(255,255,255,0.2)] group-hover:border-[rgba(255,255,255,0.4)]'}`}>
+                    {rememberMe && <CheckCircle className="w-3.5 h-3.5 text-[#061018]" strokeWidth={3} />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="hidden"
+                  />
+                  <span className="text-sm text-[#9dafb9] group-hover:text-white transition-colors">Lembrar credenciais</span>
+                </label>
+                
+                <button 
+                  type="button" 
+                  onClick={() => alert('Para redefinir sua senha, acesse a aba Authentication no painel do Supabase.')}
+                  className="text-sm text-[#f5c33b] hover:text-white transition-colors"
+                >
+                  Esqueci a senha
+                </button>
+              </div>
 
               <button
                 type="submit"
@@ -514,11 +550,6 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
               >
                 {loggingIn ? 'Entrando...' : 'Entrar no painel'}
               </button>
-
-              <div className="text-center text-[#758892] text-xs mt-3">
-                Credenciais de acesso: usuário <strong className="text-[#ffe27a]">comando</strong> • senha <strong className="text-[#ffe27a]">inspira2026</strong>
-                
-    </div>
             </form>
             
     </div>
