@@ -72,118 +72,63 @@ export const dataService = {
   // AUTH & SESSIONS
   // -----------------------------------------------------------
   async getAdminUserByUsername(username: string) {
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabase();
-        const { data, error } = await supabase
-          .from('admin_users')
-          .select('*')
-          .eq('username', username.trim())
-          .maybeSingle();
-
-        if (error) {
-          console.warn('Supabase getAdminUser error, falling back to SQLite:', error.message);
-        } else if (data) {
-          return data;
-        }
-      } catch (err) {
-        console.warn('Supabase connection error in getAdminUser, falling back to SQLite:', err);
-      }
+    // If Supabase is configured, we use Supabase Auth now, so we bypass querying the public admin_users table.
+    // We only use this local fallback if Supabase Auth is not being used.
+    try {
+      const stmt = db.prepare('SELECT * FROM admin_users WHERE username = ?');
+      return stmt.get(username.trim()) as any;
+    } catch (e) {
+      return null;
     }
-
-    const stmt = db.prepare('SELECT * FROM admin_users WHERE username = ?');
-    return stmt.get(username.trim()) as any;
   },
 
   async createSession(token: string, userId: number | string, expiresAt: string) {
     const createdAt = new Date().toISOString();
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabase();
-        const { error } = await supabase.from('sessions').insert({
-          token,
-          user_id: userId,
-          created_at: createdAt,
-          expires_at: expiresAt,
-        });
-        if (error) {
-          console.warn('Supabase createSession error:', error.message);
-        }
-      } catch (err) {
-        console.warn('Supabase createSession failed, continuing local session:', err);
-      }
+    // Supabase sessions are now handled by Supabase Auth (JWT). 
+    // We only need to store sessions locally if not using Supabase.
+    
+    try {
+      const insertSession = db.prepare(`
+        INSERT INTO sessions (token, user_id, created_at, expires_at)
+        VALUES (?, ?, ?, ?)
+      `);
+      insertSession.run(token, Number(userId) || 1, createdAt, expiresAt);
+    } catch (e) {
+      console.warn('Failed to persist session to local DB:', e);
     }
-
-    // Always keep SQLite in sync
-    const insertSession = db.prepare(`
-      INSERT INTO sessions (token, user_id, created_at, expires_at)
-      VALUES (?, ?, ?, ?)
-    `);
-    insertSession.run(token, Number(userId) || 1, createdAt, expiresAt);
   },
 
   async getSession(token: string) {
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabase();
-        const { data, error } = await supabase
-          .from('sessions')
-          .select('token, expires_at, user_id, admin_users(username)')
-          .eq('token', token)
-          .maybeSingle();
-
-        if (error) {
-          console.warn('Supabase getSession error:', error.message);
-        } else if (data) {
-          return {
-            token: data.token,
-            expires_at: data.expires_at,
-            user_id: data.user_id,
-            username: (data.admin_users as any)?.username || 'comando',
-          };
-        }
-      } catch (err) {
-        console.warn('Supabase getSession failed, checking local SQLite:', err);
-      }
+    // Supabase validation is handled via supabase.auth.getUser() in server.ts
+    // This is purely for local fallback
+    try {
+      const sessionStmt = db.prepare(`
+        SELECT s.token, s.expires_at, u.id as user_id, u.username
+        FROM sessions s
+        JOIN admin_users u ON s.user_id = u.id
+        WHERE s.token = ?
+      `);
+      return sessionStmt.get(token) as any;
+    } catch (e) {
+      return null;
     }
-
-    const sessionStmt = db.prepare(`
-      SELECT s.token, s.expires_at, u.id as user_id, u.username
-      FROM sessions s
-      JOIN admin_users u ON s.user_id = u.id
-      WHERE s.token = ?
-    `);
-    return sessionStmt.get(token) as any;
   },
 
   async deleteSession(token: string) {
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabase();
-        await supabase.from('sessions').delete().eq('token', token);
-      } catch (err) {
-        console.warn('Supabase deleteSession error:', err);
-      }
+    try {
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    } catch (e) {
+      // ignore
     }
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   },
 
   async updateAdminPassword(userId: number | string, newPassword: string) {
     const { hash, salt } = hashPassword(newPassword);
-
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabase();
-        await supabase
-          .from('admin_users')
-          .update({ password_hash: hash, salt })
-          .eq('id', userId);
-      } catch (err) {
-        console.warn('Supabase updateAdminPassword error:', err);
-      }
+    try {
+      db.prepare('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
+    } catch (e) {
+      // ignore
     }
-
-    db.prepare('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, userId);
   },
 
   // -----------------------------------------------------------

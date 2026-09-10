@@ -215,8 +215,7 @@ try {
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
         created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        FOREIGN KEY(user_id) REFERENCES admin_users(id) ON DELETE CASCADE
+        expires_at TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS pre_cadastros (

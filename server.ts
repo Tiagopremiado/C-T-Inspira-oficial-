@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import { db, hashPassword, verifyPassword } from './server/db.js';
 import { dataService } from './server/dataService.js';
-import { isSupabaseConfigured, testSupabaseConnection } from './server/supabase.js';
+import { isSupabaseConfigured, testSupabaseConnection, getSupabase } from './server/supabase.js';
 
 const app = express();
 const PORT = 3000;
@@ -85,6 +85,23 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
   }
 
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.getUser(token);
+      
+      if (error || !data.user) {
+        // Clear cookie and reject
+        res.clearCookie('inspira_session');
+        res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+        return;
+      }
+      
+      (req as any).user = { id: data.user.id, username: data.user.email };
+      next();
+      return;
+    }
+
+    // Local fallback for SQLite
     const session = await dataService.getSession(token);
 
     if (!session) {
@@ -142,11 +159,61 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      let finalEmail = username;
+      if (!username.includes('@')) {
+        finalEmail = `${username}@inspira.com`;
+      }
+
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email: finalEmail,
+        password,
+      });
+
+      // Se for a conta padrão e der credenciais inválidas, tentamos criá-la
+      // NOTA: Requer que 'Confirm Email' esteja desativado no painel do Supabase
+      if (error && error.message.toLowerCase().includes('invalid login credentials') && username === 'comando' && password === 'inspira2026') {
+        console.log('Tentando criar usuário padrão no Supabase Auth...');
+        const signUpRes = await supabase.auth.signUp({
+          email: finalEmail,
+          password,
+        });
+        if (signUpRes.data && signUpRes.data.user) {
+          const signInRes = await supabase.auth.signInWithPassword({
+            email: finalEmail,
+            password,
+          });
+          data = signInRes.data;
+          error = signInRes.error;
+        } else {
+           console.warn('Falha ao auto-registrar comando:', signUpRes.error?.message);
+        }
+      }
+
+      if (error || !data.session) {
+        res.status(401).json({ error: 'Usuário ou senha inválidos. Crie a conta no painel Auth do Supabase.' });
+        return;
+      }
+
+      const token = data.session.access_token;
+
+      res.cookie('inspira_session', token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+
+      res.json({ success: true, token, username: data.user.email });
+      return;
+    }
+
+    // LOCAL SQLITE FALLBACK
     let user = await dataService.getAdminUserByUsername(username);
 
     let valid = Boolean(user && verifyPassword(password, user.password_hash, user.salt));
 
-    // Resilient fallback: If Supabase admin hash was desynchronized, check local SQLite or default
     if (!valid) {
       let localUser: any = null;
       try {
@@ -158,9 +225,6 @@ app.post('/api/auth/login', async (req, res) => {
       if (localUser && verifyPassword(password, localUser.password_hash, localUser.salt)) {
         valid = true;
         user = localUser;
-        if (user && isSupabaseConfigured()) {
-          dataService.updateAdminPassword(user.id, password).catch(console.warn);
-        }
       } else if (password === 'inspira2026' && username === 'comando') {
         valid = true;
         if (!user) {
@@ -171,9 +235,6 @@ app.post('/api/auth/login', async (req, res) => {
             salt: '',
           };
         }
-        if (user && isSupabaseConfigured()) {
-          dataService.updateAdminPassword(user.id || 1, 'inspira2026').catch(console.warn);
-        }
       }
     }
 
@@ -182,7 +243,6 @@ app.post('/api/auth/login', async (req, res) => {
       return;
     }
 
-    // Create session
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
@@ -192,7 +252,6 @@ app.post('/api/auth/login', async (req, res) => {
       console.warn('Failed to persist session to database:', sessionErr);
     }
 
-    // Set secure cookie
     res.cookie('inspira_session', token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -215,6 +274,17 @@ app.get('/api/auth/me', async (req, res) => {
   }
 
   try {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data.user) {
+        res.json({ authenticated: false });
+        return;
+      }
+      res.json({ authenticated: true, username: data.user.email });
+      return;
+    }
+
     const session = await dataService.getSession(token);
 
     if (!session || new Date(session.expires_at) < new Date()) {
@@ -231,7 +301,13 @@ app.get('/api/auth/me', async (req, res) => {
 app.post('/api/auth/logout', async (req, res) => {
   const token = getAuthToken(req);
   if (token) {
-    await dataService.deleteSession(token);
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      // Only best-effort signOut, token is primarily cleared from cookies
+      supabase.auth.signOut().catch(() => {});
+    } else {
+      await dataService.deleteSession(token);
+    }
   }
   res.clearCookie('inspira_session');
   res.json({ success: true });
@@ -246,6 +322,35 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 
   try {
     const user = (req as any).user;
+
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      // Validate current password by signing in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.username,
+        password: currentPassword
+      });
+
+      if (signInError) {
+        res.status(401).json({ error: 'Senha atual incorreta.' });
+        return;
+      }
+
+      // Update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        res.status(500).json({ error: 'Erro ao atualizar senha no Supabase: ' + updateError.message });
+        return;
+      }
+
+      res.json({ success: true, message: 'Senha atualizada com sucesso.' });
+      return;
+    }
+
+    // LOCAL SQLITE FALLBACK
     const adminRec = await dataService.getAdminUserByUsername(user.username);
 
     if (!adminRec || !verifyPassword(currentPassword, adminRec.password_hash, adminRec.salt)) {
