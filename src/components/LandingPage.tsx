@@ -128,7 +128,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
           <div className="w-full max-w-[430px] p-2 rounded-3xl bg-[linear-gradient(180deg,rgba(11,26,39,0.95),rgba(6,13,20,0.97))] border border-[rgba(91,164,214,0.18)] shadow-[0_26px_70px_rgba(0,0,0,0.4),0_0_34px_rgba(21,118,181,0.14)]">
             <div className="aspect-[4/5] rounded-2xl overflow-hidden relative bg-[#091f2e]">
               <img
-                src="/assets/766599195_122104169685421550_6270541774438738076_n.jpg"
+                src="/assets/32123.png"
                 alt="Centro de Treinamento Inspira"
                 className="w-full h-full object-cover"
               />
@@ -271,7 +271,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
               <div className="overflow-hidden rounded-2xl bg-[linear-gradient(180deg,rgba(10,22,33,0.90),rgba(8,16,24,0.92))] border border-[rgba(84,160,212,0.12)]">
                 <div className="aspect-[4/3] overflow-hidden bg-[#0b2738]">
-                  <img src="/assets/card-valores-cristaos.jpg" alt="Valores cristãos" className="w-full h-full object-cover" />
+                  <img src="/assets/12321.png" alt="Valores cristãos" className="w-full h-full object-cover" />
                 </div>
                 <div className="p-4">
                   <strong className="block text-[#ffe27a] font-bold text-sm mb-1">Valores cristãos</strong>
