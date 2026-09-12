@@ -143,7 +143,7 @@ export const FichaCompleta: React.FC<FichaCompletaProps> = ({ onNavigate }) => {
     <div className="min-h-screen text-[#f5f7f9] bg-[radial-gradient(circle_at_85%_0%,rgba(22,134,193,0.14),transparent_25%),linear-gradient(180deg,#061018,#07131d)] pb-16">
       {/* Top Header */}
       <header className="border-b border-[rgba(255,255,255,0.09)] py-4 bg-[rgba(6,16,24,0.94)] backdrop-blur-md sticky top-0 z-20">
-        <div className="w-[min(780px,calc(100%-24px))] mx-auto flex items-center justify-between">
+        <div className="w-full max-w-[780px] mx-auto px-4 flex items-center justify-between">
           <button
             onClick={() => onNavigate('landing')}
             className="flex items-center gap-1.5 text-xs sm:text-sm text-[#9dafb9] hover:text-white transition cursor-pointer"
@@ -162,7 +162,7 @@ export const FichaCompleta: React.FC<FichaCompletaProps> = ({ onNavigate }) => {
 
       {/* Main Card */}
       <main className="pt-8 px-3">
-        <div className="w-[min(780px,calc(100%-24px))] mx-auto">
+        <div className="w-full max-w-[780px] mx-auto px-4">
           <div className="p-6 sm:p-8 rounded-3xl bg-[linear-gradient(180deg,rgba(12,27,39,0.97),rgba(8,18,26,0.98))] border border-[rgba(84,160,212,0.14)] shadow-[0_28px_80px_rgba(0,0,0,0.32)]">
             {submitted ? (
               <>

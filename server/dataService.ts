@@ -175,12 +175,14 @@ export const dataService = {
           .single();
 
         if (error) {
-          console.warn('Supabase createPreCadastro error:', error.message);
+          console.error('Supabase createPreCadastro error:', error);
+          throw new Error('Database Error: ' + error.message);
         } else if (inserted) {
           supabaseId = inserted.id;
         }
       } catch (err) {
-        console.warn('Supabase createPreCadastro failed, using SQLite:', err);
+        console.error('Supabase createPreCadastro failed:', err);
+        throw err;
       }
     }
 
@@ -381,7 +383,8 @@ export const dataService = {
         });
 
         if (error) {
-          console.warn('Supabase createCadastroCompleto error:', error.message);
+          console.error('Supabase createCadastroCompleto error:', error);
+          throw new Error('Database Error: ' + error.message);
         }
 
         // Update pre_cadastro status if needed
@@ -393,7 +396,8 @@ export const dataService = {
             .eq('status', 'Aguardando contato');
         }
       } catch (err) {
-        console.warn('Supabase createCadastroCompleto failed, storing in SQLite:', err);
+        console.error('Supabase createCadastroCompleto failed:', err);
+        throw err;
       }
     }
 

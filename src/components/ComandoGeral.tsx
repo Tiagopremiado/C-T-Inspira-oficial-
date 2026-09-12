@@ -165,7 +165,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch('/api/pre-cadastros', { headers });
+      const res = await fetch(`/api/pre-cadastros?t=${Date.now()}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setCadastros(data);
@@ -278,7 +278,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
         onClick={(e) => e.stopPropagation()}
         className={`inline-flex items-center gap-1.5 ${
           compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
-        } rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/35 font-bold transition cursor-pointer shrink-0`}
+        } rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/35 font-bold transition cursor-pointer`}
         title={`Abrir WhatsApp (${phone})`}
       >
         <MessageCircle className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-emerald-400`} />
@@ -499,7 +499,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
       <div className="min-h-screen bg-[radial-gradient(circle_at_82%_0%,rgba(22,134,193,0.14),transparent_26%),linear-gradient(180deg,#061018,#07131d_48%,#050d14)] text-[#f5f7f9]">
         {/* Topbar */}
         <header className="border-b border-[rgba(255,255,255,0.08)] py-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md">
-          <div className="w-[min(1180px,calc(100%-28px))] mx-auto flex items-center justify-between">
+          <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-10 sm:h-12 w-auto object-contain" />
               <span className="text-xs text-[#9dafb9] font-semibold hidden sm:inline">Área do Comando Geral</span>
@@ -602,7 +602,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
     <div className="min-h-screen bg-[radial-gradient(circle_at_82%_0%,rgba(22,134,193,0.14),transparent_26%),linear-gradient(180deg,#061018,#07131d_48%,#050d14)] text-[#f5f7f9] pb-16">
       {/* Topbar */}
       <header className="border-b border-[rgba(255,255,255,0.08)] py-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 z-20">
-        <div className="w-[min(1180px,calc(100%-28px))] mx-auto flex items-center justify-between gap-4">
+        <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-10 sm:h-12 w-auto object-contain" />
             <span className="text-xs text-[#9dafb9] font-semibold hidden md:inline">Área do Comando Geral</span>
@@ -624,9 +624,9 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowPasswordModal(true)}
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+          <button
+            onClick={() => setShowPasswordModal(true)}
               className="px-3 py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-xs sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-1.5 cursor-pointer"
               title="Alterar senha do Comando"
             >
@@ -654,7 +654,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
 
       {/* Main Content */}
       <main className="pt-8">
-        <div className="w-[min(1180px,calc(100%-28px))] mx-auto">
+        <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6">
           {/* Dashboard Head */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
             <div>
@@ -664,7 +664,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                 Consulte as fichas, acompanhe o status de contato e envie a ficha completa para alunos ou responsáveis.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <button
               onClick={() => {
                 const base = appBaseUrl || window.location.origin;
@@ -673,21 +673,21 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                   .then(() => alert('Link de nova inscrição copiado!'))
                   .catch(() => alert('Falha ao copiar link.'));
               }}
-              className="px-4 py-2.5 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-2 cursor-pointer shrink-0"
+              className="px-4 py-2.5 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-2 cursor-pointer"
             >
               <Copy className="w-4 h-4" />
               <span>Copiar link de inscrição</span>
             </button>
             <button
               onClick={() => setShowNovoAlunoModal(true)}
-              className="btn-inspira-gold px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer shrink-0"
+              className="btn-inspira-gold px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer"
             >
               <FileText className="w-4 h-4" />
               <span>Cadastrar Novo Aluno</span>
             </button>
             <button
     onClick={handleExportCsv}
-    className="px-4 py-2.5 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-2 cursor-pointer shrink-0"
+    className="px-4 py-2.5 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-2 cursor-pointer"
   >
     <Download className="w-4 h-4" />
               <span>Exportar CSV</span>
