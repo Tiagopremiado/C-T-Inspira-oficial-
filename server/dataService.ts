@@ -255,6 +255,11 @@ export const dataService = {
               observacao: r.observacao,
               hasFullRegistration: Boolean(full),
               fichaId: full ? full.id : null,
+              documentacaoStatus: r.documentacao_status || 'Pendente',
+              ultimoContatoEm: r.ultimo_contato_em,
+              responsavelContato: r.responsavel_contato,
+              proximoPasso: r.proximo_passo,
+              observacaoContato: r.observacao_contato,
             };
           });
         }
@@ -291,6 +296,11 @@ export const dataService = {
       observacao: r.observacao,
       hasFullRegistration: Boolean(r.has_full_registration),
       fichaId: r.ficha_id,
+      documentacaoStatus: r.documentacao_status || 'Pendente',
+      ultimoContatoEm: r.ultimo_contato_em,
+      responsavelContato: r.responsavel_contato,
+      proximoPasso: r.proximo_passo,
+      observacaoContato: r.observacao_contato,
     }));
   },
 
@@ -536,4 +546,111 @@ export const dataService = {
       autorizaImagem: Boolean(row.autoriza_imagem),
     };
   },
+
+  async addHistorico(alunoId: number, tipoEvento: string, descricao: string, usuario: string) {
+    const dataEvento = new Date().toISOString();
+    let supabaseId = null;
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase.from('historico_aluno').insert({
+          aluno_id: alunoId,
+          tipo_evento: tipoEvento,
+          descricao,
+          data_evento: dataEvento,
+          usuario
+        }).select('id').single();
+        if (data) supabaseId = data.id;
+      } catch (e) {
+        console.warn('Supabase historico err', e);
+      }
+    }
+
+    const insert = db.prepare('INSERT INTO historico_aluno (aluno_id, tipo_evento, descricao, data_evento, usuario) VALUES (?, ?, ?, ?, ?)');
+    insert.run(alunoId, tipoEvento, descricao, dataEvento, usuario);
+  },
+
+  async getHistorico(alunoId: number) {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data } = await supabase.from('historico_aluno').select('*').eq('aluno_id', alunoId).order('id', { ascending: false });
+        if (data) {
+          return data.map((r: any) => ({
+            id: r.id, alunoId: r.aluno_id, tipoEvento: r.tipo_evento, descricao: r.descricao, dataEvento: r.data_evento, usuario: r.usuario
+          }));
+        }
+      } catch (e) {}
+    }
+
+    const stmt = db.prepare('SELECT * FROM historico_aluno WHERE aluno_id = ? ORDER BY id DESC');
+    return stmt.all(alunoId).map((r: any) => ({
+      id: r.id, alunoId: r.aluno_id, tipoEvento: r.tipo_evento, descricao: r.descricao, dataEvento: r.data_evento, usuario: r.usuario
+    }));
+  },
+
+  async updateDocumentacaoStatus(id: number | string, status: string) {
+    if (isSupabaseConfigured()) {
+      try {
+        await getSupabase().from('pre_cadastros').update({ documentacao_status: status }).eq('id', id);
+      } catch (e) {}
+    }
+    db.prepare('UPDATE pre_cadastros SET documentacao_status = ? WHERE id = ?').run(status, id);
+  },
+
+  async updatePreCadastroDados(id: number | string, data: any) {
+    if (isSupabaseConfigured()) {
+      try {
+        await getSupabase().from('pre_cadastros').update({
+          nome_aluno: data.nomeAluno,
+          nascimento_aluno: data.nascimentoAluno,
+          cidade_aluno: data.cidadeAluno,
+          whats_aluno: data.whatsAluno,
+          nome_responsavel: data.nomeResponsavel,
+          parentesco: data.parentesco,
+          whats_responsavel: data.whatsResponsavel
+        }).eq('id', id);
+        
+        await getSupabase().from('cadastros_completos').update({
+          nome: data.nomeAluno,
+          nascimento: data.nascimentoAluno,
+          cidade: data.cidadeAluno,
+          whats: data.whatsAluno,
+          responsavel: data.nomeResponsavel,
+          parentesco: data.parentesco,
+          whats_responsavel: data.whatsResponsavel
+        }).eq('ref', id);
+      } catch (e) {}
+    }
+    db.prepare(`UPDATE pre_cadastros SET 
+      nome_aluno = ?, nascimento_aluno = ?, cidade_aluno = ?, whats_aluno = ?, 
+      nome_responsavel = ?, parentesco = ?, whats_responsavel = ? 
+      WHERE id = ?`)
+      .run(data.nomeAluno, data.nascimentoAluno, data.cidadeAluno, data.whatsAluno, data.nomeResponsavel, data.parentesco, data.whatsResponsavel, id);
+      
+    try {
+      db.prepare(`UPDATE cadastros_completos SET 
+        nome = ?, nascimento = ?, cidade = ?, whats = ?, 
+        responsavel = ?, parentesco = ?, whats_responsavel = ? 
+        WHERE ref = ?`)
+        .run(data.nomeAluno, data.nascimentoAluno, data.cidadeAluno, data.whatsAluno, data.nomeResponsavel, data.parentesco, data.whatsResponsavel, id);
+    } catch(e) {}
+  },
+
+  async updateContato(id: number | string, data: { responsavelContato: string, proximoPasso: string, observacaoContato: string }) {
+    const d = new Date().toISOString();
+    if (isSupabaseConfigured()) {
+      try {
+        await getSupabase().from('pre_cadastros').update({
+          ultimo_contato_em: d,
+          responsavel_contato: data.responsavelContato,
+          proximo_passo: data.proximoPasso,
+          observacao_contato: data.observacaoContato
+        }).eq('id', id);
+      } catch (e) {}
+    }
+    db.prepare('UPDATE pre_cadastros SET ultimo_contato_em = ?, responsavel_contato = ?, proximo_passo = ?, observacao_contato = ? WHERE id = ?')
+      .run(d, data.responsavelContato, data.proximoPasso, data.observacaoContato, id);
+  }
 };

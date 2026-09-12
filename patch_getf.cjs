@@ -1,7 +1,7 @@
 const fs = require('fs');
 let code = fs.readFileSync('src/components/FichaAluno.tsx', 'utf8');
 
-code = code.replace(/const getFieldValue = \(keyPre: keyof PreCadastro, keyFull\?: keyof CadastroCompleto\) => \{.*?\n  \};\n/s, `// Setup editData state correctly
+code = code.replace(/const getFieldValue = \(\(keyPre: keyof PreCadastro, keyFull\?: keyof CadastroCompleto\) => \{.*?\n  \};\n/s, `  // Setup editData state correctly
   useEffect(() => {
     if (isEditing && Object.keys(editData).length === 0) {
       setEditData({ ...preCadastro });
@@ -19,21 +19,14 @@ code = code.replace(/const getFieldValue = \(keyPre: keyof PreCadastro, keyFull\
           body: JSON.stringify(editData)
         });
         if (res.ok) {
-          // Re-fetch or update local state
-          Object.assign(preCadastro, editData);
           alert('Dados atualizados com sucesso!');
         }
       } catch (e) {
         alert('Erro ao salvar dados.');
       }
-    } else {
-      // populate editData before opening
-      setEditData({ ...preCadastro });
     }
     setIsEditing(!isEditing);
   };
 `);
-
-code = code.replace(/onClick=\{() => setIsEditing\(!isEditing\)\}/g, `onClick={handleToggleEdit}`);
 
 fs.writeFileSync('src/components/FichaAluno.tsx', code);

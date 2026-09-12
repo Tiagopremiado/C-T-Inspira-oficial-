@@ -271,7 +271,24 @@ try {
 
       CREATE INDEX IF NOT EXISTS idx_pre_status ON pre_cadastros(status);
       CREATE INDEX IF NOT EXISTS idx_full_ref ON cadastros_completos(ref);
+
+      CREATE TABLE IF NOT EXISTS historico_aluno (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aluno_id INTEGER NOT NULL,
+        tipo_evento TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        data_evento TEXT NOT NULL,
+        usuario TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_historico_aluno ON historico_aluno(aluno_id);
     `);
+
+    // Add Phase 2 columns to pre_cadastros if they don't exist
+    try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN documentacao_status TEXT DEFAULT "Pendente"').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN ultimo_contato_em TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN responsavel_contato TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN proximo_passo TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN observacao_contato TEXT').run(); } catch (e) {}
 
     // Seed default admin user 'comando' if none exists
     const checkAdmin = realDb.prepare('SELECT id FROM admin_users WHERE username = ?');

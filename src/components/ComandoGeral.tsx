@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PreCadastro, CadastroCompleto } from '../types.js';
 import { NovoAlunoModal } from './NovoAlunoModal.js';
-import { Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, Database } from 'lucide-react';
+import { FichaAluno } from './FichaAluno.js';
+import { Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files } from 'lucide-react';
 
 interface ComandoGeralProps {
   onNavigate: (route: string) => void;
@@ -23,6 +24,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   const [statusFilter, setStatusFilter] = useState('todos');
 
   // Modals state
+  const [selectedAluno, setSelectedAluno] = useState<PreCadastro | null>(null);
   const [selectedPre, setSelectedPre] = useState<PreCadastro | null>(null);
   const [selectedFull, setSelectedFull] = useState<CadastroCompleto | null>(null);
   const [loadingFull, setLoadingFull] = useState(false);
@@ -193,6 +195,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
         setCadastros((prev) =>
           prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
         );
+        setSelectedAluno((prev) => prev && prev.id === id ? { ...prev, status: newStatus } : prev);
       }
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
@@ -408,6 +411,16 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
     }
   };
 
+  const calculateAge = (dob: string | undefined) => {
+    if (!dob) return '';
+    try {
+      const d = new Date(dob.includes('T') ? dob : dob + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      const ageDifMs = Date.now() - d.getTime();
+      const ageDate = new Date(ageDifMs);
+      return Math.abs(ageDate.getUTCFullYear() - 1970) + ' anos';
+    } catch { return ''; }
+  };
   const formatDate = (val?: string) => {
     if (!val) return 'Não informado';
     try {
@@ -426,7 +439,21 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
         .join(' ')
         .toLowerCase();
       const matchesQuery = !q || text.includes(q);
-      const matchesFilter = statusFilter === 'todos' || r.status === statusFilter;
+      let matchesFilter = true;
+      if (statusFilter === 'Pré-cadastro') {
+        matchesFilter = !r.hasFullRegistration;
+      } else if (statusFilter === 'Cadastro completo') {
+        matchesFilter = r.hasFullRegistration === true;
+      } else if (statusFilter === 'Doc: Pendente') {
+        matchesFilter = r.documentacaoStatus === 'Pendente';
+      } else if (statusFilter === 'Doc: Em análise') {
+        matchesFilter = r.documentacaoStatus === 'Em análise';
+      } else if (statusFilter === 'Doc: Completo') {
+        matchesFilter = r.documentacaoStatus === 'Completo';
+      } else if (statusFilter !== 'todos') {
+        matchesFilter = r.status === statusFilter;
+      }
+      
       return matchesQuery && matchesFilter;
     });
   }, [cadastros, searchTerm, statusFilter]);
@@ -435,11 +462,22 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
   const stats = useMemo(() => {
     return {
       total: cadastros.length,
-      aguardando: cadastros.filter((r) => r.status === 'Aguardando contato').length,
-      atendimento: cadastros.filter((r) => r.status === 'Em atendimento').length,
-      confirmados: cadastros.filter((r) => r.status === 'Confirmado').length,
+      novosPreCadastros: cadastros.filter(c => c.status === 'Novo cadastro' || c.status === 'Aguardando contato').length,
+      ativos: cadastros.filter(c => c.status === 'Ativo').length,
+      aguardando: cadastros.filter(c => c.status === 'Em análise' || c.status === 'Em atendimento').length,
+      incompletos: cadastros.filter(c => !c.hasFullRegistration).length,
+      docsPendentes: cadastros.filter(c => c.hasFullRegistration && c.status === 'Documentação pendente').length,
     };
   }, [cadastros]);
+
+  const handleOpenFicha = async (aluno: PreCadastro) => {
+    setSelectedAluno(aluno);
+    if (aluno.hasFullRegistration) {
+      handleOpenFullRegistration(aluno.id);
+    } else {
+      setSelectedFull(null);
+    }
+  };
 
   // If waiting for initial auth check
   if (isAuthenticated === null) {
@@ -658,32 +696,43 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
           </div>
 
           {/* Stats Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(84,160,212,0.11)]">
-              <span className="block text-[#9dafb9] text-xs mb-1.5">Total de pré-cadastros</span>
-              <strong className="text-2xl sm:text-3xl text-[#ffe27a] font-black">{stats.total}</strong>
-              
-    </div>
-
-            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(84,160,212,0.11)]">
-              <span className="block text-[#9dafb9] text-xs mb-1.5">Aguardando contato</span>
-              <strong className="text-2xl sm:text-3xl text-[#f5c33b] font-black">{stats.aguardando}</strong>
-              
-    </div>
-
-            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(84,160,212,0.11)]">
-              <span className="block text-[#9dafb9] text-xs mb-1.5">Em atendimento</span>
-              <strong className="text-2xl sm:text-3xl text-[#1aa0e6] font-black">{stats.atendimento}</strong>
-              
-    </div>
-
-            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(84,160,212,0.11)]">
-              <span className="block text-[#9dafb9] text-xs mb-1.5">Confirmados</span>
-              <strong className="text-2xl sm:text-3xl text-emerald-400 font-black">{stats.confirmados}</strong>
-              
-    </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(84,160,212,0.11)] relative overflow-hidden group">
+              <Users className="w-16 h-16 absolute -right-3 -bottom-3 text-white opacity-5 group-hover:scale-110 transition-transform" />
+              <span className="block text-[#9dafb9] text-[11px] uppercase tracking-wider mb-1.5 font-bold">Total Cadastrados</span>
+              <strong className="text-2xl sm:text-3xl text-white font-black">{stats.total}</strong>
+            </div>
             
-    </div>
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-[rgba(245,195,59,0.15)] relative overflow-hidden group">
+              <UserPlus className="w-16 h-16 absolute -right-3 -bottom-3 text-[#f5c33b] opacity-10 group-hover:scale-110 transition-transform" />
+              <span className="block text-[#f5c33b] text-[11px] uppercase tracking-wider mb-1.5 font-bold">Novos Pré-Cadastros</span>
+              <strong className="text-2xl sm:text-3xl text-[#f5c33b] font-black">{stats.novosPreCadastros}</strong>
+            </div>
+            
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-emerald-500/15 relative overflow-hidden group">
+              <UserCheck className="w-16 h-16 absolute -right-3 -bottom-3 text-emerald-400 opacity-10 group-hover:scale-110 transition-transform" />
+              <span className="block text-emerald-400 text-[11px] uppercase tracking-wider mb-1.5 font-bold">Alunos Ativos</span>
+              <strong className="text-2xl sm:text-3xl text-emerald-400 font-black">{stats.ativos}</strong>
+            </div>
+            
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-sky-500/15 relative overflow-hidden group">
+              <Clock4 className="w-16 h-16 absolute -right-3 -bottom-3 text-sky-400 opacity-10 group-hover:scale-110 transition-transform" />
+              <span className="block text-sky-300 text-[11px] uppercase tracking-wider mb-1.5 font-bold">Em Análise</span>
+              <strong className="text-2xl sm:text-3xl text-sky-400 font-black">{stats.aguardando}</strong>
+            </div>
+            
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-red-500/15 relative overflow-hidden group">
+              <FileWarning className="w-16 h-16 absolute -right-3 -bottom-3 text-red-400 opacity-10 group-hover:scale-110 transition-transform" />
+              <span className="block text-red-300 text-[11px] uppercase tracking-wider mb-1.5 font-bold">Incompletos</span>
+              <strong className="text-2xl sm:text-3xl text-red-400 font-black">{stats.incompletos}</strong>
+            </div>
+            
+            <div className="p-4 rounded-2xl bg-[linear-gradient(180deg,rgba(15,35,50,0.88),rgba(8,20,30,0.94))] border border-orange-500/15 relative overflow-hidden group">
+              <Files className="w-16 h-16 absolute -right-3 -bottom-3 text-orange-400 opacity-10 group-hover:scale-110 transition-transform" />
+              <span className="block text-orange-300 text-[11px] uppercase tracking-wider mb-1.5 font-bold">Docs. Pendentes</span>
+              <strong className="text-2xl sm:text-3xl text-orange-400 font-black">{stats.docsPendentes}</strong>
+            </div>
+          </div>
 
           {/* Search & Filter Toolbar */}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_230px] gap-3 mb-4">
@@ -704,10 +753,21 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
               onChange={(e) => setStatusFilter(e.target.value)}
               className="min-h-[48px] rounded-xl border border-[rgba(255,255,255,0.09)] bg-[#0d1a23] text-white px-3.5 focus:border-[#f5c33b] focus:outline-none transition text-sm cursor-pointer"
             >
-              <option value="todos">Todos os status</option>
-              <option value="Aguardando contato">Aguardando contato</option>
-              <option value="Em atendimento">Em atendimento</option>
-              <option value="Confirmado">Confirmado</option>
+              <option value="todos">Todos os cadastros</option>
+              <option value="Pré-cadastro">Apenas Pré-cadastros</option>
+              <option value="Cadastro completo">Cadastros Completos</option>
+              <option value="Em análise">Aguardando análise</option>
+              <option value="Aprovado">Aprovado</option>
+              <option value="Ativo">Ativo</option>
+              <option value="Inativo">Inativo</option>
+              <option value="Novo cadastro">Novo cadastro</option>
+              <option value="Primeiro contato realizado">Primeiro contato</option>
+              <option value="Aguardando retorno">Aguardando retorno</option>
+              <option value="Documentação pendente">Status: Doc. pendente</option>
+              <option value="Doc: Pendente">Apenas Docs Pendentes</option>
+              <option value="Doc: Em análise">Apenas Docs Em análise</option>
+              <option value="Doc: Completo">Apenas Docs Completos</option>
+              <option value="Matrícula confirmada">Matrícula confirmada</option>
             </select>
             
     </div>
@@ -730,108 +790,97 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                 <thead>
                   <tr className="border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.025)]">
                     <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Aluno</th>
-                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">WhatsApp</th>
-                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Responsável</th>
+                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Data de Cadastro</th>
+                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Responsável / WhatsApp</th>
                     <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Cidade</th>
-                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Ficha Completa</th>
+                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Última Atualização</th>
                     <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Status</th>
-                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold">Ações</th>
+                    <th className="p-3.5 text-left text-xs uppercase tracking-wider text-[#8fa2ad] font-bold text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgba(255,255,255,0.05)] text-sm text-[#dce5ea]">
                   {filtered.map((r) => (
-                    <tr key={r.id} className="hover:bg-[rgba(255,255,255,0.02)] transition">
+                    <tr key={r.id} className="hover:bg-[rgba(255,255,255,0.02)] transition group">
                       <td className="p-3.5">
-                        <strong className="block text-white">{r.nomeAluno}</strong>
-                        <small className="text-[#84949d] block text-xs">{formatDate(r.nascimentoAluno)}</small>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] flex items-center justify-center shrink-0">
+                            <User className="w-5 h-5 text-[#8fa2ad]" />
+                          </div>
+                          <div>
+                            <strong className="block text-white group-hover:text-[#f5c33b] transition-colors">{r.nomeAluno}</strong>
+                            <span className="text-[#84949d] text-xs block">{calculateAge(r.nascimentoAluno)}</span>
+                          </div>
+                        </div>
                       </td>
-                      <td className="p-3.5 font-mono text-xs">
-                        <div className="flex flex-col items-start gap-1.5">
-                          <span className="text-white font-medium">{r.whatsAluno || r.whatsResponsavel || 'Não informado'}</span>
-                          {(r.whatsAluno || r.whatsResponsavel) && (
-                            <WhatsAppLinkBtn
-                              phone={r.whatsAluno || r.whatsResponsavel}
-                              label="Conversar"
-                              compact
-                            />
+                      <td className="p-3.5 text-xs text-[#8fa2ad]">
+                        {formatDate(r.criadoEm)}
+                      </td>
+                      <td className="p-3.5">
+                        <span className="block text-white text-sm">{r.nomeResponsavel || 'Não informado'}</span>
+                        <span className="block font-mono text-xs text-[#8fa2ad] mt-0.5">{r.whatsResponsavel || r.whatsAluno || 'Sem número'}</span>
+                      </td>
+                      <td className="p-3.5 text-sm">
+                        {r.cidadeAluno || '—'}
+                      </td>
+                      <td className="p-3.5 text-xs text-[#8fa2ad]">
+                        {r.ultimoContatoEm ? new Date(r.ultimoContatoEm).toLocaleDateString('pt-BR') : 'Sem registro'}
+                      </td>
+                      <td className="p-3.5">
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold border ${
+                            r.status === 'Ativo' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' :
+                            r.status === 'Em análise' ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' :
+                            r.status === 'Inativo' ? 'bg-red-500/15 text-red-300 border-red-500/30' :
+                            r.status.includes('Documentação') ? 'bg-orange-500/15 text-orange-300 border-orange-500/30' :
+                            'bg-[#f5c33b]/15 text-[#f5c33b] border-[#f5c33b]/30'
+                          }`}>
+                            {r.status}
+                          </span>
+                          {r.hasFullRegistration && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                              <CheckCircle className="w-3 h-3" /> Ficha Enviada
+                            </span>
                           )}
                         </div>
                       </td>
                       <td className="p-3.5">
-                        {r.nomeResponsavel || 'Não informado'}
-                        {r.parentesco && <span className="text-[#84949d] text-xs block">({r.parentesco})</span>}
-                      </td>
-                      <td className="p-3.5">{r.cidadeAluno || 'Não informado'}</td>
-                      <td className="p-3.5">
-                        {r.hasFullRegistration ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold text-xs bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-full">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            <span>Enviada</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[#8fa2ad] text-xs bg-[rgba(255,255,255,0.04)] px-2.5 py-1 rounded-full">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Pendente</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3.5">
-                        <select
-                          value={r.status}
-                          onChange={(e) => handleStatusChange(r.id, e.target.value)}
-                          className="min-h-[34px] rounded-lg border border-[rgba(255,255,255,0.12)] bg-[#0d1a23] text-white px-2 text-xs font-semibold focus:border-[#f5c33b] focus:outline-none cursor-pointer"
-                        >
-                          <option value="Aguardando contato">Aguardando contato</option>
-                          <option value="Em atendimento">Em atendimento</option>
-                          <option value="Confirmado">Confirmado</option>
-                        </select>
-                      </td>
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
                           <button
-                            onClick={() => setSelectedPre(r)}
-                            className="min-h-[32px] px-2.5 rounded-lg border border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.045)] text-xs font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition cursor-pointer"
-                          >
-                            Ver pré-cadastro
-                          </button>
-
-                          <button
-                            onClick={() => handleOpenFullRegistration(r.id)}
-                            className={`min-h-[32px] px-2.5 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                            onClick={() => handleOpenFicha(r)}
+                            className={`min-h-[32px] px-2.5 rounded-lg border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                               r.hasFullRegistration
                                 ? 'border-emerald-500/40 bg-emerald-950/25 text-emerald-300 hover:bg-emerald-900/40'
-                                : 'border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.045)] text-[#8fa2ad] hover:text-white'
+                                : 'border-[#f5c33b]/40 bg-[#f5c33b]/10 text-[#f5c33b] hover:bg-[#f5c33b]/20'
                             }`}
                           >
-                            Ver ficha completa
-                          </button>
-
-                          <button
-                            onClick={() => handleCopyLink(r)}
-                            className="min-h-[32px] px-2.5 rounded-lg border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.05)] text-xs font-bold text-white hover:bg-[rgba(255,255,255,0.1)] transition flex items-center gap-1 cursor-pointer"
-                            title="Copiar link da ficha"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copiar link</span>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Abrir Ficha</span>
                           </button>
 
                           <button
                             onClick={() => handleSendWhatsApp(r)}
-                            className="min-h-[32px] px-2.5 rounded-lg border border-[rgba(245,195,59,0.25)] bg-[rgba(245,195,59,0.08)] text-xs font-bold text-[#ffe27a] hover:bg-[rgba(245,195,59,0.15)] transition flex items-center gap-1 cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-[rgba(245,195,59,0.25)] bg-[rgba(245,195,59,0.08)] text-[#ffe27a] hover:bg-[rgba(245,195,59,0.15)] transition flex items-center justify-center cursor-pointer"
+                            title="Enviar WhatsApp"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>Enviar ficha completa</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleCopyLink(r)}
+                            className="w-8 h-8 rounded-lg border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.05)] text-white hover:bg-[rgba(255,255,255,0.1)] transition flex items-center justify-center cursor-pointer"
+                            title="Copiar link da ficha"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
 
                           <button
                             onClick={() => handleDelete(r.id)}
-                            className="min-h-[32px] px-2 rounded-lg border border-red-500/20 bg-red-950/20 text-xs font-bold text-red-300 hover:bg-red-900/40 transition cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-red-500/20 bg-red-950/20 text-red-300 hover:bg-red-900/40 transition flex items-center justify-center cursor-pointer"
                             title="Excluir"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                          
-    </div>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -844,374 +893,21 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
     </div>
       </main>
 
-      {/* Modal: Pré-cadastro */}
-      {selectedPre && (
-        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-[760px] max-h-[90vh] overflow-y-auto p-6 sm:p-7 rounded-3xl bg-[#0b1721] border border-[rgba(255,255,255,0.10)] shadow-2xl relative my-auto">
-            <button
-              onClick={() => setSelectedPre(null)}
-              className="absolute right-4 top-4 w-9 h-9 rounded-xl border border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.04)] text-white hover:bg-[rgba(255,255,255,0.1)] flex items-center justify-center cursor-pointer transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <span className="text-[#f5c33b] text-xs font-black uppercase tracking-wider">Ficha do aluno</span>
-            <h2 className="text-2xl font-bold text-white mt-1 mb-4">Dados do pré-cadastro</h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Aluno</span>
-                <strong className="text-white text-base">{selectedPre.nomeAluno}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Nascimento</span>
-                <strong className="text-white">{formatDate(selectedPre.nascimentoAluno)}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Cidade</span>
-                <strong className="text-white">{selectedPre.cidadeAluno || 'Não informado'}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Quem cadastrou</span>
-                <strong className="text-white">{selectedPre.tipoCadastro === 'responsavel' ? 'Responsável' : 'Aluno'}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)] flex items-center justify-between gap-2">
-                <div>
-                  <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">WhatsApp aluno</span>
-                  <strong className="text-white text-base">{selectedPre.whatsAluno || 'Não informado'}</strong>
-                </div>
-                {selectedPre.whatsAluno && (
-                  <WhatsAppLinkBtn phone={selectedPre.whatsAluno} label="Abrir WhatsApp" />
-                )}
-              </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)] flex items-center justify-between gap-2">
-                <div>
-                  <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">WhatsApp responsável</span>
-                  <strong className="text-white text-base">{selectedPre.whatsResponsavel || 'Não informado'}</strong>
-                </div>
-                {selectedPre.whatsResponsavel && (
-                  <WhatsAppLinkBtn phone={selectedPre.whatsResponsavel} label="Abrir WhatsApp" />
-                )}
-              </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Responsável</span>
-                <strong className="text-white">{selectedPre.nomeResponsavel || 'Não informado'}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Parentesco</span>
-                <strong className="text-white">{selectedPre.parentesco || 'Não informado'}</strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Contato preferido</span>
-                <strong className="text-white">
-                  {selectedPre.contatoPreferido === 'aluno'
-                    ? 'Aluno'
-                    : selectedPre.contatoPreferido === 'responsavel'
-                    ? 'Responsável'
-                    : selectedPre.contatoPreferido === 'ambos'
-                    ? 'Aluno e responsável'
-                    : 'Não informado'}
-                </strong>
-                
-    </div>
-
-              <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Status</span>
-                <strong className="text-[#ffe27a]">{selectedPre.status}</strong>
-                
-    </div>
-
-              <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Observações</span>
-                <p className="text-white whitespace-pre-wrap">{selectedPre.observacao || 'Nenhuma observação informada.'}</p>
-                
-    </div>
-
-              <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Pré-cadastro realizado em</span>
-                <strong className="text-white">{new Date(selectedPre.criadoEm).toLocaleString('pt-BR')}</strong>
-                
-    </div>
-              
-    </div>
-
-            <div className="mt-5 flex gap-2 flex-wrap items-center">
-              <button
-                onClick={() => handleSendWhatsApp(selectedPre)}
-                className="btn-inspira-gold px-5 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 cursor-pointer"
-              >
-                <Send className="w-4 h-4" />
-                <span>Enviar link da ficha completa pelo WhatsApp</span>
-              </button>
-              {selectedPre.whatsAluno && (
-                <WhatsAppLinkBtn phone={selectedPre.whatsAluno} label="Conversar com Aluno" />
-              )}
-              {selectedPre.whatsResponsavel && (
-                <WhatsAppLinkBtn phone={selectedPre.whatsResponsavel} label="Conversar com Responsável" />
-              )}
-            </div>
-            
-    </div>
-          
-    </div>
-      )}
-
-      {/* Modal: Ficha Completa */}
-      {(selectedFull || loadingFull || fullError) && (
-        <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-[780px] max-h-[90vh] overflow-y-auto p-6 sm:p-7 rounded-3xl bg-[#0b1721] border border-[rgba(255,255,255,0.10)] shadow-2xl relative my-auto">
-            <button
-              onClick={() => {
-                setSelectedFull(null);
-                setFullError('');
-              }}
-              className="absolute right-4 top-4 w-9 h-9 rounded-xl border border-[rgba(255,255,255,0.09)] bg-[rgba(255,255,255,0.04)] text-white hover:bg-[rgba(255,255,255,0.1)] flex items-center justify-center cursor-pointer transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <span className="text-[#f5c33b] text-xs font-black uppercase tracking-wider">Ficha completa</span>
-            <h2 className="text-2xl font-bold text-white mt-1 mb-4">Dados cadastrais completos</h2>
-
-            {loadingFull ? (
-              <div className="p-8 text-center text-[#8799a3]">
-                <div className="w-6 h-6 border-2 border-[#f5c33b] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                Buscando ficha completa...
-                
-    </div>
-            ) : fullError ? (
-              <div className="p-5 rounded-xl bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] text-center">
-                <AlertTriangle className="w-8 h-8 text-[#f5c33b] mx-auto mb-2" />
-                <p className="text-white font-medium mb-3">{fullError}</p>
-                <p className="text-xs text-[#8fa2ad]">
-                  Você pode enviar o link da ficha completa para o aluno ou responsável pelo WhatsApp.
-                </p>
-                
-    </div>
-            ) : selectedFull ? (
-              <div className="space-y-4">
-                {/* Grid de Informações */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Aluno</span>
-                    <strong className="text-white text-base">{selectedFull.nome}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Nascimento</span>
-                    <strong className="text-white">{formatDate(selectedFull.nascimento)}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)] flex items-center justify-between gap-2">
-                    <div>
-                      <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">WhatsApp aluno</span>
-                      <strong className="text-white text-base">{selectedFull.whats || 'Não informado'}</strong>
-                    </div>
-                    {selectedFull.whats && (
-                      <WhatsAppLinkBtn phone={selectedFull.whats} label="Abrir WhatsApp" />
-                    )}
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Cidade</span>
-                    <strong className="text-white">{selectedFull.cidade || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Bairro</span>
-                    <strong className="text-white">{selectedFull.bairro || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Endereço</span>
-                    <strong className="text-white">{selectedFull.endereco || 'Não informado'}</strong>
-                    
-    </div>
-
-                  {/* Estudos */}
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Escola / Instituição</span>
-                    <strong className="text-white">{selectedFull.escola || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Ano / Curso</span>
-                    <strong className="text-white">{selectedFull.curso || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Objetivos no Inspira</span>
-                    <strong className="text-white">{selectedFull.objetivos || 'Não informado'}</strong>
-                    
-    </div>
-
-                  {/* Responsável */}
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Responsável</span>
-                    <strong className="text-white">{selectedFull.responsavel || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Parentesco</span>
-                    <strong className="text-white">{selectedFull.parentesco || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)] flex items-center justify-between gap-2">
-                    <div>
-                      <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">WhatsApp do responsável</span>
-                      <strong className="text-white text-base">{selectedFull.whatsResponsavel || 'Não informado'}</strong>
-                    </div>
-                    {selectedFull.whatsResponsavel && (
-                      <WhatsAppLinkBtn phone={selectedFull.whatsResponsavel} label="Abrir WhatsApp" />
-                    )}
-                  </div>
-
-                  {/* Saúde e Laudo */}
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Possui laudo</span>
-                    <strong className="text-[#ffe27a]">{selectedFull.possuiLaudo || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">CID</span>
-                    <strong className="text-white">{selectedFull.cid || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3.5 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(245,195,59,0.18)] flex items-center justify-between gap-3">
-                    <div>
-                      <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Arquivo de laudo / documento de saúde</span>
-                      <strong className="text-white text-sm flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-[#f5c33b]" />
-                        <span>{selectedFull.laudoArquivoNome || 'Nenhum arquivo registrado'}</span>
-                      </strong>
-                      
-    </div>
-
-                    {selectedFull.laudoDownloadUrl && (
-                      <a
-                        href={selectedFull.laudoDownloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 rounded-lg bg-[rgba(245,195,59,0.15)] text-[#ffe27a] hover:bg-[rgba(245,195,59,0.25)] text-xs font-bold transition flex items-center gap-1 shrink-0"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Visualizar / Baixar</span>
-                      </a>
-                    )}
-                    
-    </div>
-
-                  {/* Alergias e Medicamentos */}
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Possui alergias</span>
-                    <strong className="text-white">{selectedFull.temAlergia || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Quais alergias</span>
-                    <strong className="text-white">{selectedFull.alergias || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Usa medicamento contínuo</span>
-                    <strong className="text-white">{selectedFull.usaMedicamento || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Medicamentos em uso</span>
-                    <strong className="text-white">{selectedFull.medicamentos || 'Não informado'}</strong>
-                    
-    </div>
-
-                  {/* Restrições e Saúde */}
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Restrições</span>
-                    <strong className="text-white">{selectedFull.restricoes || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Condições / Orientações de saúde</span>
-                    <strong className="text-white">{selectedFull.condicoesSaude || 'Não informado'}</strong>
-                    
-    </div>
-
-                  {/* Emergência */}
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Contato de emergência</span>
-                    <strong className="text-white">{selectedFull.emergenciaNome || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)] flex items-center justify-between gap-2">
-                    <div>
-                      <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Telefone de emergência</span>
-                      <strong className="text-white text-base">{selectedFull.emergenciaFone || 'Não informado'}</strong>
-                    </div>
-                    {selectedFull.emergenciaFone && (
-                      <WhatsAppLinkBtn phone={selectedFull.emergenciaFone} label="Abrir WhatsApp" />
-                    )}
-                  </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Orientação em emergência</span>
-                    <strong className="text-white">{selectedFull.orientacaoEmergencia || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="sm:col-span-2 p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Outras informações de segurança</span>
-                    <strong className="text-white">{selectedFull.seguranca || 'Não informado'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Autorização de imagem</span>
-                    <strong className="text-white">{selectedFull.autorizaImagem ? 'Sim' : 'Não'}</strong>
-                    
-    </div>
-
-                  <div className="p-3 rounded-xl bg-[rgba(255,255,255,0.035)] border border-[rgba(255,255,255,0.06)]">
-                    <span className="block text-[#8798a2] text-[11px] uppercase tracking-wider mb-1">Ficha enviada em</span>
-                    <strong className="text-white">{new Date(selectedFull.enviadoEm).toLocaleString('pt-BR')}</strong>
-                    
-    </div>
-                  
-    </div>
-                
-    </div>
-            ) : null}
-            
-    </div>
-          
-    </div>
+      {/* Modal: Ficha Aluno Unificada */}
+      {selectedAluno && (
+        <FichaAluno
+          preCadastro={selectedAluno}
+          cadastroCompleto={selectedFull}
+          onClose={() => {
+            setSelectedAluno(null);
+            setSelectedFull(null);
+          }}
+          onStatusChange={(status) => handleStatusChange(selectedAluno.id, status)}
+          onSendWhatsApp={(phone, isResp) => {
+             const url = getWhatsAppUrl(phone, isResp ? "Olá! Somos do Centro de Treinamento Inspira." : "Fala guerreiro! Aqui é do Comando Inspira.");
+             if (url) window.open(url, "_blank");
+          }}
+        />
       )}
 
       {/* Modal: Alterar Senha */}

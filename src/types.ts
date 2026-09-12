@@ -1,7 +1,7 @@
 export interface PreCadastro {
   id: number;
   criadoEm: string;
-  status: 'Aguardando contato' | 'Em atendimento' | 'Confirmado' | string;
+  status: 'Novo cadastro' | 'Primeiro contato realizado' | 'Aguardando retorno' | 'Documentação pendente' | 'Matrícula confirmada' | 'Finalizado' | 'Pré-cadastro' | 'Em análise' | 'Aprovado' | 'Ativo' | 'Inativo' | string;
   tipoCadastro: 'aluno' | 'responsavel' | string;
   nomeAluno: string;
   nascimentoAluno: string;
@@ -14,6 +14,22 @@ export interface PreCadastro {
   observacao?: string;
   hasFullRegistration?: boolean;
   fichaId?: number;
+  
+  // Phase 2 additions
+  documentacaoStatus?: 'Pendente' | 'Em análise' | 'Completo' | string;
+  ultimoContatoEm?: string;
+  responsavelContato?: string;
+  proximoPasso?: string;
+  observacaoContato?: string;
+}
+
+export interface HistoricoAluno {
+  id: number;
+  alunoId: number;
+  tipoEvento: 'Sistema' | 'Contato' | 'Documentacao' | 'Status' | 'Outro';
+  descricao: string;
+  dataEvento: string;
+  usuario: string; // "Sistema", "Admin", etc.
 }
 
 export interface CadastroCompleto {
@@ -47,4 +63,13 @@ export interface CadastroCompleto {
   orientacaoEmergencia?: string;
   seguranca?: string;
   autorizaImagem?: boolean;
+}
+
+// Fase 2: Preparação para Gerenciamento de Equipe (Níveis de Acesso)
+export interface UsuarioComando {
+  id: number;
+  nome: string;
+  email: string;
+  papel: 'Administrador Geral' | 'Instrutor' | 'Secretaria';
+  ativo: boolean;
 }

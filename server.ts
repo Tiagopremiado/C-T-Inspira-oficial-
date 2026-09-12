@@ -433,7 +433,12 @@ app.patch('/api/pre-cadastros/:id/status', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const validStatuses = ['Aguardando contato', 'Em atendimento', 'Confirmado'];
+  const validStatuses = [
+    'Aguardando contato', 'Em atendimento', 'Confirmado',
+    'Pré-cadastro', 'Em análise', 'Aprovado', 'Ativo', 'Inativo',
+    'Novo cadastro', 'Primeiro contato realizado', 'Aguardando retorno',
+    'Documentação pendente', 'Matrícula confirmada', 'Finalizado'
+  ];
   if (!validStatuses.includes(status)) {
     res.status(400).json({ error: 'Status inválido.' });
     return;
@@ -441,10 +446,70 @@ app.patch('/api/pre-cadastros/:id/status', requireAuth, async (req, res) => {
 
   try {
     await dataService.updatePreCadastroStatus(id, status);
+    
+    // Add history for status change
+    await dataService.addHistorico(Number(id), 'Status', `Status atualizado para: ${status}`, 'Comando Geral');
+    
     res.json({ success: true, status });
   } catch (error: any) {
     console.error('Error updating status:', error);
     res.status(500).json({ error: 'Erro ao atualizar status.' });
+  }
+});
+
+app.get('/api/historico/:alunoId', requireAuth, async (req, res) => {
+  try {
+    const list = await dataService.getHistorico(Number(req.params.alunoId));
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao buscar histórico.' });
+  }
+});
+
+app.post('/api/historico', requireAuth, async (req, res) => {
+  try {
+    const { alunoId, tipoEvento, descricao, usuario } = req.body;
+    await dataService.addHistorico(Number(alunoId), tipoEvento, descricao, usuario || 'Comando Geral');
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao adicionar histórico.' });
+  }
+});
+
+app.patch('/api/pre-cadastros/:id/dados', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nomeAluno, nascimentoAluno, cidadeAluno, whatsAluno, nomeResponsavel, parentesco, whatsResponsavel } = req.body;
+    
+    await dataService.updatePreCadastroDados(id, {
+      nomeAluno, nascimentoAluno, cidadeAluno, whatsAluno, nomeResponsavel, parentesco, whatsResponsavel
+    });
+    
+    await dataService.addHistorico(Number(id), 'Atualização', `Dados básicos atualizados no sistema.`, (req as any).user.username || 'Comando Geral');
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao atualizar dados.' });
+  }
+});
+
+app.patch('/api/pre-cadastros/:id/contato', requireAuth, async (req, res) => {
+  try {
+    await dataService.updateContato(req.params.id, req.body);
+    await dataService.addHistorico(Number(req.params.id), 'Contato', `Contato realizado por: ${req.body.responsavelContato}. Obs: ${req.body.observacaoContato}`, 'Comando Geral');
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao atualizar contato.' });
+  }
+});
+
+app.patch('/api/pre-cadastros/:id/documentacao', requireAuth, async (req, res) => {
+  try {
+    await dataService.updateDocumentacaoStatus(req.params.id, req.body.status);
+    await dataService.addHistorico(Number(req.params.id), 'Documentacao', `Status da documentação alterado para: ${req.body.status}`, 'Comando Geral');
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Erro ao atualizar doc status.' });
   }
 });
 
@@ -725,6 +790,16 @@ app.use((req, res, next) => {
 // -------------------------------------------------------------
 // VITE OR STATIC FILE SERVING
 // -------------------------------------------------------------
+
+// Global API Error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  if (req.path.startsWith('/api/')) {
+    console.error('API Error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  } else {
+    next(err);
+  }
+});
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
