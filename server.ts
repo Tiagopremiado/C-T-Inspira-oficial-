@@ -1,4 +1,5 @@
 import express from 'express';
+import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -168,13 +169,14 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     if (isSupabaseConfigured()) {
-      const supabase = getSupabase();
+      // Create a fresh client for auth to avoid mutating the global singleton's session
+      const authSupabase = createClient(process.env.SUPABASE_URL || '', (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY) || '', { auth: { persistSession: false, autoRefreshToken: false } });
       let finalEmail = username;
       if (!username.includes('@')) {
         finalEmail = `${username}@inspira.com`;
       }
 
-      let { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await authSupabase.auth.signInWithPassword({
         email: finalEmail,
         password,
       });
@@ -183,12 +185,12 @@ app.post('/api/auth/login', async (req, res) => {
       // NOTA: Requer que 'Confirm Email' esteja desativado no painel do Supabase
       if (error && error.message.toLowerCase().includes('invalid login credentials') && username === 'comando' && password === 'inspira2026') {
         console.log('Tentando criar usuário padrão no Supabase Auth...');
-        const signUpRes = await supabase.auth.signUp({
+        const signUpRes = await authSupabase.auth.signUp({
           email: finalEmail,
           password,
         });
         if (signUpRes.data && signUpRes.data.user) {
-          const signInRes = await supabase.auth.signInWithPassword({
+          const signInRes = await authSupabase.auth.signInWithPassword({
             email: finalEmail,
             password,
           });
@@ -334,7 +336,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     if (isSupabaseConfigured()) {
       const supabase = getSupabase();
       // Validate current password by signing in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await authSupabase.auth.signInWithPassword({
         email: user.username,
         password: currentPassword
       });

@@ -20,3 +20,19 @@ GET /api/pre-cadastros called
 Returning list length: 0
 GET /api/pre-cadastros called
 Returning list length: 4
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 0
+GET /api/pre-cadastros called
+Returning list length: 4
