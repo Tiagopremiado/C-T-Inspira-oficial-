@@ -219,8 +219,7 @@ export const dataService = {
       try {
         const supabase = getSupabase();
         // Fetch pre_cadastros and associated cadastros_completos
-        console.log("Fetching from Supabase...");
-const { data: preList, error } = await supabase
+        const { data: preList, error } = await supabase
           .from('pre_cadastros')
           .select('*')
           .order('id', { ascending: false });
@@ -241,8 +240,7 @@ const { data: preList, error } = await supabase
             });
           }
 
-          console.log("Supabase returned", preList ? preList.length : 0, "items");
-return preList.map((r: any) => {
+          return preList.map((r: any) => {
             const full = fullMap.get(String(r.id));
             return {
               id: r.id,

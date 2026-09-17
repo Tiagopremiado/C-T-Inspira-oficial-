@@ -430,15 +430,12 @@ app.post('/api/pre-cadastros', async (req, res) => {
   }
 });
 
-app.get('/api/pre-cadastros', (req, res, next) => { console.log("API pre-cadastros HIT"); next(); }, async (req, res) => {
-  fs.appendFileSync('api_log.txt', 'GET /api/pre-cadastros called\n');
+app.get('/api/pre-cadastros', requireAuth, async (req, res) => {
   try {
     const list = await dataService.getPreCadastros();
-    fs.appendFileSync('api_log.txt', 'Returning list length: ' + list.length + '\n');
-    res.json(list);
+      res.json(list);
   } catch (error: any) {
-    fs.appendFileSync('api_log.txt', 'Error: ' + error.stack + '\n');
-    console.error('Error fetching pre-cadastros:', error);
+      console.error('Error fetching pre-cadastros:', error);
     res.status(500).json({ error: 'Erro ao consultar cadastros.', details: error.message, stack: error.stack });
   }
 });
@@ -474,8 +471,7 @@ app.patch('/api/pre-cadastros/:id/status', requireAuth, async (req, res) => {
 app.get('/api/historico/:alunoId', requireAuth, async (req, res) => {
   try {
     const list = await dataService.getHistorico(Number(req.params.alunoId));
-    fs.appendFileSync('api_log.txt', 'Returning list length: ' + list.length + '\n');
-    res.json(list);
+      res.json(list);
   } catch (error: any) {
     res.status(500).json({ error: 'Erro ao buscar histórico.' });
   }
