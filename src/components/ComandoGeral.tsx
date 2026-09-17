@@ -601,14 +601,32 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_82%_0%,rgba(22,134,193,0.14),transparent_26%),linear-gradient(180deg,#061018,#07131d_48%,#050d14)] text-[#f5f7f9] pb-16">
       {/* Topbar */}
-      <header className="border-b border-[rgba(255,255,255,0.08)] py-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 z-20">
-        <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-10 sm:h-12 w-auto object-contain" />
-            <span className="text-xs text-[#9dafb9] font-semibold hidden md:inline">Área do Comando Geral</span>
+      <header className="border-b border-[rgba(255,255,255,0.08)] py-3 sm:py-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 z-20">
+        <div className="w-full max-w-[1180px] mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-8 sm:h-12 w-auto object-contain" />
+              <span className="text-[10px] sm:text-xs text-[#9dafb9] font-semibold hidden md:inline">Área do Comando Geral</span>
+            </div>
             {dbProvider && (
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition ${
+                className={`sm:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                  dbProvider.isSupabase
+                    ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                    : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
+                }`}
+                title="Status do banco de dados"
+              >
+                <Database className="w-3 h-3" />
+                <span>{dbProvider.provider === 'supabase' ? 'Nuvem' : 'Local'}</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end w-full sm:w-auto">
+            {dbProvider && (
+              <span
+                className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition ${
                   dbProvider.isSupabase
                     ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
                     : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
@@ -616,34 +634,32 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                 title={
                   dbProvider.isSupabase
                     ? 'Banco de dados Supabase (Nuvem) conectado'
-                    : 'Banco de dados SQLite (Local) ativo. Adicione SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente para nuvem.'
+                    : 'Banco de dados SQLite (Local) ativo.'
                 }
               >
                 <Database className="w-3 h-3" />
-                <span className="hidden xs:inline">{dbProvider.label}</span>
+                <span>{dbProvider.label}</span>
               </span>
             )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 justify-end">
           <button
             onClick={() => setShowPasswordModal(true)}
-              className="px-3 py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-xs sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-[11px] sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-1 sm:gap-1.5 cursor-pointer"
               title="Alterar senha do Comando"
             >
-              <Key className="w-4 h-4 text-[#f5c33b]" />
+              <Key className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#f5c33b]" />
               <span className="hidden sm:inline">Senha</span>
             </button>
             <button
               onClick={() => onNavigate('landing')}
-              className="px-3 py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-xs sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-[11px] sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition cursor-pointer"
             >
-              Voltar ao site
+              Site
             </button>
             <button
               onClick={handleLogout}
-              className="px-3 py-2 rounded-xl border border-red-500/20 bg-red-950/20 text-xs sm:text-sm font-bold text-red-200 hover:bg-red-900/30 transition flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-red-500/20 bg-red-950/20 text-[11px] sm:text-sm font-bold text-red-200 hover:bg-red-900/30 transition flex items-center gap-1 sm:gap-1.5 cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Sair</span>
             </button>
             

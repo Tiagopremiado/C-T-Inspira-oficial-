@@ -9,6 +9,15 @@ import { dataService } from './server/dataService.js';
 import { isSupabaseConfigured, testSupabaseConnection, getSupabase } from './server/supabase.js';
 
 const app = express();
+// Anti-caching for all API routes
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 const PORT = 3000;
 
 app.use(express.json());
@@ -419,13 +428,16 @@ app.post('/api/pre-cadastros', async (req, res) => {
   }
 });
 
-app.get('/api/pre-cadastros', requireAuth, async (req, res) => {
+app.get('/api/pre-cadastros', (req, res, next) => { console.log("API pre-cadastros HIT"); next(); }, async (req, res) => {
+  fs.appendFileSync('api_log.txt', 'GET /api/pre-cadastros called\n');
   try {
     const list = await dataService.getPreCadastros();
+    fs.appendFileSync('api_log.txt', 'Returning list length: ' + list.length + '\n');
     res.json(list);
   } catch (error: any) {
+    fs.appendFileSync('api_log.txt', 'Error: ' + error.stack + '\n');
     console.error('Error fetching pre-cadastros:', error);
-    res.status(500).json({ error: 'Erro ao consultar cadastros.' });
+    res.status(500).json({ error: 'Erro ao consultar cadastros.', details: error.message, stack: error.stack });
   }
 });
 
@@ -460,6 +472,7 @@ app.patch('/api/pre-cadastros/:id/status', requireAuth, async (req, res) => {
 app.get('/api/historico/:alunoId', requireAuth, async (req, res) => {
   try {
     const list = await dataService.getHistorico(Number(req.params.alunoId));
+    fs.appendFileSync('api_log.txt', 'Returning list length: ' + list.length + '\n');
     res.json(list);
   } catch (error: any) {
     res.status(500).json({ error: 'Erro ao buscar histórico.' });

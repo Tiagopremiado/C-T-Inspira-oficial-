@@ -219,13 +219,15 @@ export const dataService = {
       try {
         const supabase = getSupabase();
         // Fetch pre_cadastros and associated cadastros_completos
-        const { data: preList, error } = await supabase
+        console.log("Fetching from Supabase...");
+const { data: preList, error } = await supabase
           .from('pre_cadastros')
           .select('*')
           .order('id', { ascending: false });
 
         if (error) {
-          console.warn('Supabase getPreCadastros error, fallback to SQLite:', error.message);
+          console.error('CRITICAL SUPABASE ERROR IN getPreCadastros:', error);
+   throw new Error('Supabase select failed: ' + error.message);
         } else if (preList) {
           // Fetch references in cadastros_completos
           const { data: fullList } = await supabase
@@ -239,7 +241,8 @@ export const dataService = {
             });
           }
 
-          return preList.map((r: any) => {
+          console.log("Supabase returned", preList ? preList.length : 0, "items");
+return preList.map((r: any) => {
             const full = fullMap.get(String(r.id));
             return {
               id: r.id,
@@ -266,7 +269,8 @@ export const dataService = {
           });
         }
       } catch (err) {
-        console.warn('Supabase getPreCadastros exception, falling back to SQLite:', err);
+        console.error('CRITICAL SUPABASE EXCEPTION IN getPreCadastros:', err);
+   throw err;
       }
     }
 
