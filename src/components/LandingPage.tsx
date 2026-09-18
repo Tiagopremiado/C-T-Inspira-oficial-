@@ -329,13 +329,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
           </a>
           
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
-            <button
-              onClick={() => onNavigate('comando')}
-              className="text-[#9dafb9] hover:text-[#f5c33b] font-medium transition flex items-center gap-2 cursor-pointer"
-            >
-              <Shield className="w-4 h-4" />
-              <span>Login - Aluno / Comando</span>
-            </button>
             <div className="text-center sm:text-right">
               © {new Date().getFullYear()} Centro de Treinamento Inspira.
             </div>

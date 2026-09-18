@@ -144,3 +144,20 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, ser
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
+
+-- 9. TABELA DE HISTÓRICO / AUDITORIA
+CREATE TABLE IF NOT EXISTS public.historico_aluno (
+  id BIGSERIAL PRIMARY KEY,
+  aluno_id BIGINT NOT NULL,
+  tipo_evento TEXT NOT NULL,
+  descricao TEXT NOT NULL,
+  data_evento TIMESTAMPTZ DEFAULT NOW(),
+  usuario TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_aluno_id ON public.historico_aluno(aluno_id);
+ALTER TABLE public.historico_aluno ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role" ON public.historico_aluno FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service" ON public.historico_aluno FOR ALL TO anon USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE public.historico_aluno TO postgres, anon, authenticated, service_role;

@@ -105,30 +105,29 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
         return;
       }
       
-      (req as any).user = { id: data.user.id, username: data.user.email };
+      if (data.user.user_metadata?.status === 'Bloqueado') { res.status(403).json({ error: 'Conta bloqueada.' }); return; }
+      (req as any).user = { id: data.user.id, username: data.user.email, role: data.user.user_metadata?.funcao || 'Administrador' };
       next();
-      return;
+    } else {
+      // Local fallback
+      const row = db.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?').get(token) as any;
+      if (!row) {
+        res.clearCookie('inspira_session');
+        res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+        return;
+      }
+      if (new Date(row.expires_at) < new Date()) {
+        db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+        res.clearCookie('inspira_session');
+        res.status(401).json({ error: 'Sessão expirada.' });
+        return;
+      }
+      const userRow = db.prepare('SELECT username FROM admin_users WHERE id = ?').get(row.user_id) as any;
+      (req as any).user = { id: row.user_id, username: userRow?.username || 'admin', role: 'Administrador' };
+      next();
     }
-
-    // Local fallback for SQLite
-    const session = await dataService.getSession(token);
-
-    if (!session) {
-      res.status(401).json({ error: 'Sessão inválida ou expirada.' });
-      return;
-    }
-
-    if (new Date(session.expires_at) < new Date()) {
-      await dataService.deleteSession(token);
-      res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
-      return;
-    }
-
-    (req as any).user = { id: session.user_id, username: session.username };
-    next();
   } catch (err) {
-    console.error('Auth verification error:', err);
-    res.status(500).json({ error: 'Erro ao verificar autenticação.' });
+    res.status(500).json({ error: 'Erro de autenticação interno.' });
   }
 }
 
@@ -201,6 +200,10 @@ app.post('/api/auth/login', async (req, res) => {
         }
       }
 
+      if (data && data.user && data.user.user_metadata?.status === 'Bloqueado') {
+        res.status(401).json({ error: 'Sua conta está bloqueada. Entre em contato com a administração.' });
+        return;
+      }
       if (error || !data.session) {
         res.status(401).json({ error: 'Usuário ou senha inválidos. Crie a conta no painel Auth do Supabase.' });
         return;
@@ -291,7 +294,7 @@ app.get('/api/auth/me', async (req, res) => {
         res.json({ authenticated: false });
         return;
       }
-      res.json({ authenticated: true, username: data.user.email });
+      res.json({ authenticated: true, username: data.user.email, role: data.user.user_metadata?.funcao || 'Administrador', status: data.user.user_metadata?.status || 'Ativo', id: data.user.id });
       return;
     }
 
@@ -336,7 +339,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     if (isSupabaseConfigured()) {
       const supabase = getSupabase();
       // Validate current password by signing in
-      const { error: signInError } = await authSupabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user.username,
         password: currentPassword
       });
@@ -789,6 +792,167 @@ app.get('/api/laudos/:filename', requireAuth, (req, res) => {
 
   res.sendFile(filePath);
 });
+
+
+// --- EQUIPE DO COMANDO ROUTES ---
+app.get('/api/equipe', requireAuth, async (req, res) => {
+  try {
+    if ((req as any).user?.role !== 'Administrador') {
+      res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+      return;
+    }
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.admin.listUsers();
+      if (error) throw error;
+      const users = (data.users || []).map(u => ({
+        id: u.id,
+        email: u.user_metadata?.email_contato || u.email,
+        login: u.user_metadata?.login || (u.email ? u.email.split('@')[0] : ''),
+        nome_completo: u.user_metadata?.nome_completo || 'Sem nome',
+        funcao: u.user_metadata?.funcao || 'Administrador',
+        status: u.user_metadata?.status || 'Ativo',
+        whatsapp: u.user_metadata?.whatsapp || '',
+        foto: u.user_metadata?.foto || '',
+        criado_em: u.created_at,
+        ultimo_acesso: u.last_sign_in_at
+      }));
+      res.json(users);
+    } else {
+      res.status(400).json({ error: 'Banco de dados não configurado para equipe.' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao listar equipe.' });
+  }
+});
+
+app.post('/api/equipe', requireAuth, async (req, res) => {
+  try {
+    if ((req as any).user?.role !== 'Administrador') {
+      res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+      return;
+    }
+    const { login, email, password, nome_completo, whatsapp, funcao, foto, status } = req.body;
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      
+            // Format login to be a valid email structure, without spaces
+      let authEmail = email ? email.trim() : '';
+      if (login) {
+        let safeLogin = login.trim().toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9_.-]/g, '');
+        if (!safeLogin) safeLogin = 'user' + Math.floor(Math.random() * 1000);
+        authEmail = safeLogin.includes('@') ? safeLogin : `${safeLogin}@inspira.com`;
+      } else if (!authEmail) {
+        throw new Error("É necessário informar o Login ou Email");
+      }
+      
+      const { data, error } = await supabase.auth.admin.createUser({
+        email: authEmail,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          nome_completo,
+          whatsapp,
+          funcao,
+          status: status || 'Ativo',
+          login,
+          email_contato: email,
+          foto
+        }
+      });
+      if (error) throw error;
+      
+      await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.username || 'Sistema'} criou usuário ${nome_completo}`, 'Comando Geral');
+      res.json({ success: true, user: data.user });
+    } else {
+      res.status(400).json({ error: 'Banco de dados não configurado para equipe.' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Erro ao criar usuário.' });
+  }
+});
+
+
+
+app.delete('/api/equipe/:id', requireAuth, async (req, res) => {
+  try {
+    if ((req as any).user?.role !== 'Administrador') {
+      res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+      return;
+    }
+    const { id } = req.params;
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      
+      const { data: userData } = await supabase.auth.admin.getUserById(id);
+      const userName = userData?.user?.user_metadata?.nome_completo || 'Desconhecido';
+      
+      const { error } = await supabase.auth.admin.deleteUser(id);
+      if (error) throw error;
+      
+      await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.username || 'Sistema'} removeu o usuário ${userName}`, 'Comando Geral');
+      
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: 'Banco de dados não configurado para equipe.' });
+    }
+  } catch (err: any) {
+    require('fs').appendFileSync('debug_error.log', 'DELETE ERROR: ' + err.message + '\n');
+      console.error('DELETE /api/equipe/:id ERROR:', err);
+    res.status(500).json({ error: err.message || 'Erro ao remover usuário.' });
+  }
+});
+
+app.patch('/api/equipe/:id', requireAuth, async (req, res) => {
+  try {
+    if ((req as any).user?.role !== 'Administrador') {
+      res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+      return;
+    }
+    const { id } = req.params;
+    const { nome_completo, whatsapp, funcao, status, password, login, email, foto } = req.body;
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabase();
+      
+      const { data: userData } = await supabase.auth.admin.getUserById(id);
+      if (!userData || !userData.user) throw new Error("User not found");
+      
+      const updates: any = {
+        user_metadata: {
+          ...userData.user.user_metadata,
+          nome_completo: nome_completo !== undefined ? nome_completo : userData.user.user_metadata?.nome_completo,
+          whatsapp: whatsapp !== undefined ? whatsapp : userData.user.user_metadata?.whatsapp,
+          funcao: funcao !== undefined ? funcao : userData.user.user_metadata?.funcao,
+          status: status !== undefined ? status : userData.user.user_metadata?.status,
+          login: login !== undefined ? login : userData.user.user_metadata?.login,
+          email_contato: email !== undefined ? email : userData.user.user_metadata?.email_contato,
+          foto: foto !== undefined ? foto : userData.user.user_metadata?.foto
+        }
+      };
+      
+      if (password) updates.password = password;
+      
+      const { error } = await supabase.auth.admin.updateUserById(id, updates);
+      if (error) throw error;
+      
+      if (status !== undefined && status !== userData.user.user_metadata?.status) {
+          await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.username || 'Sistema'} ${status === 'Bloqueado' ? 'bloqueou' : 'ativou'} o usuário ${updates.user_metadata.nome_completo}`, 'Comando Geral');
+      } else {
+          await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.username || 'Sistema'} editou o usuário ${updates.user_metadata.nome_completo}`, 'Comando Geral');
+      }
+      
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: 'Banco de dados não configurado para equipe.' });
+    }
+  } catch (err: any) {
+    require('fs').appendFileSync('debug_error.log', 'PATCH ERROR: ' + err.message + '\n');
+      console.error('PATCH /api/equipe/:id ERROR:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar usuário.' });
+  }
+});
+
+
 
 // Handle direct .html routes for seamless integration with links
 app.use((req, res, next) => {

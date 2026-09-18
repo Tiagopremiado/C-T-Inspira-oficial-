@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PreCadastro, CadastroCompleto } from '../types.js';
 import { NovoAlunoModal } from './NovoAlunoModal.js';
 import { FichaAluno } from './FichaAluno.js';
-import { Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files } from 'lucide-react';
+import { EquipeComando } from './EquipeComando.js';
+import { Menu, Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files } from 'lucide-react';
 
 interface ComandoGeralProps {
   onNavigate: (route: string) => void;
@@ -11,6 +12,9 @@ interface ComandoGeralProps {
 export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [activeTab, setActiveTab] = useState<'cadastros' | 'equipe'>('cadastros');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState('Administrador');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -84,6 +88,7 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
         const data = await res.json();
         if (data.authenticated) {
           setIsAuthenticated(true);
+          if (data.role) setCurrentUserRole(data.role);
           loadCadastros(token || undefined);
           return;
         }
@@ -599,77 +604,171 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
 
   // If Authenticated: Render Full Dashboard
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_82%_0%,rgba(22,134,193,0.14),transparent_26%),linear-gradient(180deg,#061018,#07131d_48%,#050d14)] text-[#f5f7f9] pb-16">
-      {/* Topbar */}
-      <header className="border-b border-[rgba(255,255,255,0.08)] py-3 sm:py-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 z-20">
-        <div className="w-full max-w-[1180px] mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center justify-between w-full sm:w-auto">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-8 sm:h-12 w-auto object-contain" />
-              <span className="text-[10px] sm:text-xs text-[#9dafb9] font-semibold hidden md:inline">Área do Comando Geral</span>
-            </div>
-            {dbProvider && (
-              <span
-                className={`sm:hidden inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
-                  dbProvider.isSupabase
-                    ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
-                    : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
-                }`}
-                title="Status do banco de dados"
-              >
-                <Database className="w-3 h-3" />
-                <span>{dbProvider.provider === 'supabase' ? 'Nuvem' : 'Local'}</span>
-              </span>
-            )}
-          </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_82%_0%,rgba(22,134,193,0.14),transparent_26%),linear-gradient(180deg,#061018,#07131d_48%,#050d14)] text-[#f5f7f9] flex overflow-hidden">
+      {/* To
+      {/* Sidebar (Desktop) */}
+      <aside className="w-[260px] hidden md:flex flex-col border-r border-[rgba(255,255,255,0.08)] bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 h-screen shrink-0">
+        <div className="p-6 border-b border-[rgba(255,255,255,0.08)]">
+          <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-10 w-auto object-contain" />
+          <span className="block mt-2 text-[10px] sm:text-xs text-[#9dafb9] font-semibold">Área do Comando Geral</span>
+        </div>
+        
+        <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
+          <button 
+            onClick={() => setActiveTab('cadastros')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'cadastros' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+          >
+            <Users className="w-5 h-5" />
+            <span>Cadastros</span>
+          </button>
 
-          <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end w-full sm:w-auto">
-            {dbProvider && (
-              <span
-                className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition ${
-                  dbProvider.isSupabase
-                    ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
-                    : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
-                }`}
-                title={
-                  dbProvider.isSupabase
-                    ? 'Banco de dados Supabase (Nuvem) conectado'
-                    : 'Banco de dados SQLite (Local) ativo.'
-                }
-              >
-                <Database className="w-3 h-3" />
-                <span>{dbProvider.label}</span>
-              </span>
-            )}
+          {currentUserRole === 'Administrador' && (
+            <button 
+              onClick={() => setActiveTab('equipe')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'equipe' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+            >
+              <Shield className="w-5 h-5" />
+              <span>Equipe do Comando</span>
+            </button>
+          )}
+
           <button
             onClick={() => setShowPasswordModal(true)}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-[11px] sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition flex items-center gap-1 sm:gap-1.5 cursor-pointer"
-              title="Alterar senha do Comando"
-            >
-              <Key className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#f5c33b]" />
-              <span className="hidden sm:inline">Senha</span>
-            </button>
-            <button
-              onClick={() => onNavigate('landing')}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-[rgba(255,255,255,0.11)] bg-[rgba(255,255,255,0.045)] text-[11px] sm:text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.09)] transition cursor-pointer"
-            >
-              Site
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border border-red-500/20 bg-red-950/20 text-[11px] sm:text-sm font-bold text-red-200 hover:bg-red-900/30 transition flex items-center gap-1 sm:gap-1.5 cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Sair</span>
-            </button>
-            
-    </div>
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.05)] transition cursor-pointer"
+          >
+            <Key className="w-5 h-5 text-[#9dafb9]" />
+            <span>Alterar Senha</span>
+          </button>
           
-    </div>
-      </header>
+          <button
+            onClick={() => onNavigate('landing')}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.05)] transition cursor-pointer"
+          >
+            <ExternalLink className="w-5 h-5 text-[#9dafb9]" />
+            <span>Site Principal</span>
+          </button>
+        </div>
+
+        <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
+          {dbProvider && (
+            <div className={`mb-4 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+              dbProvider.isSupabase
+                ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
+            }`}>
+              <Database className="w-3 h-3" />
+              <span className="text-center">{dbProvider.label}</span>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-red-500/20 bg-red-950/20 text-sm font-bold text-red-200 hover:bg-red-900/30 transition cursor-pointer"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Sair do Painel</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Wrapper */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+        {/* Mobile Header (Hidden on Desktop) */}
+        
+        {/* Mobile Header (Hidden on Desktop) */}
+        <header className="md:hidden border-b border-[rgba(255,255,255,0.08)] py-3 px-4 bg-[rgba(6,16,24,0.92)] backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center justify-between gap-3">
+            <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-8 w-auto object-contain" />
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)} 
+              className="p-2 rounded-lg bg-[rgba(255,255,255,0.05)] text-white hover:bg-[rgba(255,255,255,0.1)] transition"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          </div>
+        </header>
+
+        {/* Mobile Sidebar Overlay */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex">
+            <div 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <aside className="relative w-[280px] max-w-[80vw] h-full bg-[#08141e] border-r border-[#1a2e3d] flex flex-col shadow-2xl animate-in slide-in-from-left duration-200">
+              <div className="p-5 border-b border-[rgba(255,255,255,0.08)] flex justify-between items-center">
+                <img src="/assets/logo-inspira.png" alt="Centro de Treinamento Inspira" className="h-8 w-auto object-contain" />
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 rounded-full bg-[rgba(255,255,255,0.05)] text-[#9dafb9] hover:bg-[rgba(255,255,255,0.1)]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
+                <span className="block mb-4 px-2 text-[10px] uppercase tracking-wider font-black text-[#6b7b85]">Menu</span>
+                
+                <button 
+                  onClick={() => { setActiveTab('cadastros'); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'cadastros' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+                >
+                  <Users className="w-5 h-5" />
+                  <span>Cadastros</span>
+                </button>
+
+                {currentUserRole === 'Administrador' && (
+                  <button 
+                    onClick={() => { setActiveTab('equipe'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'equipe' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+                  >
+                    <Shield className="w-5 h-5" />
+                    <span>Equipe do Comando</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => { setShowPasswordModal(true); setIsMobileMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.05)] transition cursor-pointer"
+                >
+                  <Key className="w-5 h-5 text-[#9dafb9]" />
+                  <span>Alterar Senha</span>
+                </button>
+                
+                <button
+                  onClick={() => { onNavigate('landing'); setIsMobileMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-white hover:bg-[rgba(255,255,255,0.05)] transition cursor-pointer"
+                >
+                  <ExternalLink className="w-5 h-5 text-[#9dafb9]" />
+                  <span>Site Principal</span>
+                </button>
+              </div>
+
+              <div className="p-4 border-t border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.2)]">
+                {dbProvider && (
+                  <div className={`mb-4 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                    dbProvider.isSupabase
+                      ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                      : 'bg-sky-500/15 border-sky-500/35 text-sky-300'
+                  }`}>
+                    <Database className="w-3 h-3" />
+                    <span className="text-center">{dbProvider.label}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-500/20 bg-red-950/20 text-sm font-bold text-red-200 hover:bg-red-900/30 transition cursor-pointer"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span>Sair do Painel</span>
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
 
       {/* Main Content */}
       <main className="pt-8">
+        {activeTab === 'equipe' ? <EquipeComando currentUserRole={currentUserRole} /> : (
         <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6">
           {/* Dashboard Head */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
@@ -907,6 +1006,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
     </div>
           
     </div>
+        )}
       </main>
 
       {/* Modal: Ficha Aluno Unificada */}
@@ -995,6 +1095,7 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
           onSuccess={() => loadCadastros(token)}
         />
       )}
+      </div>
     </div>
   );
 };

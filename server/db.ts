@@ -35,6 +35,7 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
 // In-memory fallback database for serverless environments where node:sqlite is not available (e.g. Node 20 on Vercel)
 class FallbackMemoryDatabase {
   admin_users: any[] = [];
+  equipe_comando: any[] = [];
   sessions: any[] = [];
   pre_cadastros: any[] = [];
   cadastros_completos: any[] = [];
@@ -281,6 +282,19 @@ try {
         usuario TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_historico_aluno ON historico_aluno(aluno_id);
+      CREATE TABLE IF NOT EXISTS equipe_comando (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        nome_completo TEXT,
+        whatsapp TEXT,
+        funcao TEXT NOT NULL DEFAULT 'Administrador',
+        status TEXT NOT NULL DEFAULT 'Ativo',
+        ultimo_acesso TEXT,
+        created_at TEXT NOT NULL
+      );
+      
     `);
 
     // Add Phase 2 columns to pre_cadastros if they don't exist
