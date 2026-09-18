@@ -39,8 +39,12 @@ class FallbackMemoryDatabase {
   sessions: any[] = [];
   pre_cadastros: any[] = [];
   cadastros_completos: any[] = [];
+  financeiro_eventos: any[] = [];
+  aluno_financeiro_config: any[] = [];
+  pagamentos: any[] = [];
   private nextPreId = 1;
   private nextFullId = 1;
+  private nextEventoId = 1;
 
   constructor() {
     const defaultPassword = process.env.ADMIN_PASSWORD || 'inspira2026';
@@ -294,6 +298,123 @@ try {
         ultimo_acesso TEXT,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS avaliacoes_aluno (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aluno_id INTEGER NOT NULL,
+        data_avaliacao TEXT NOT NULL,
+        instrutor_id TEXT,
+        instrutor_nome TEXT NOT NULL,
+        observacoes_gerais TEXT,
+        nota_disciplina INTEGER NOT NULL DEFAULT 3,
+        comentario_disciplina TEXT,
+        nota_responsabilidade INTEGER NOT NULL DEFAULT 3,
+        comentario_responsabilidade TEXT,
+        nota_trabalho_equipe INTEGER NOT NULL DEFAULT 3,
+        comentario_trabalho_equipe TEXT,
+        nota_lideranca INTEGER NOT NULL DEFAULT 3,
+        comentario_lideranca TEXT,
+        nota_comunicacao INTEGER NOT NULL DEFAULT 3,
+        comentario_comunicacao TEXT,
+        nota_participacao INTEGER NOT NULL DEFAULT 3,
+        comentario_participacao TEXT,
+        nota_superacao INTEGER NOT NULL DEFAULT 3,
+        comentario_superacao TEXT,
+        media_geral REAL NOT NULL DEFAULT 3.0,
+        metas TEXT,
+        missoes TEXT,
+        criado_em TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_avaliacoes_aluno ON avaliacoes_aluno(aluno_id);
+      CREATE INDEX IF NOT EXISTS idx_avaliacoes_data ON avaliacoes_aluno(data_avaliacao);
+
+      -- MÓDULO 7: CONTROLE DE FREQUÊNCIA
+      CREATE TABLE IF NOT EXISTS frequencia_aluno (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aluno_id INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        atividade TEXT NOT NULL,
+        instrutor_id TEXT,
+        instrutor_nome TEXT NOT NULL,
+        status TEXT NOT NULL,
+        observacao TEXT,
+        criado_em TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_frequencia_aluno ON frequencia_aluno(aluno_id);
+      CREATE INDEX IF NOT EXISTS idx_frequencia_data ON frequencia_aluno(data);
+
+      -- MÓDULO 8: COMUNICAÇÃO
+      CREATE TABLE IF NOT EXISTS comunicados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        titulo TEXT NOT NULL,
+        mensagem TEXT NOT NULL,
+        data TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        aluno_id INTEGER,
+        aluno_nome TEXT,
+        criado_por TEXT NOT NULL,
+        criador_id TEXT,
+        status TEXT NOT NULL DEFAULT 'Publicado',
+        observacao_interna TEXT,
+        criado_em TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_comunicados_data ON comunicados(data);
+      CREATE INDEX IF NOT EXISTS idx_comunicados_tipo ON comunicados(tipo);
+      CREATE INDEX IF NOT EXISTS idx_comunicados_aluno ON comunicados(aluno_id);
+
+      -- MÓDULO 9: FINANCEIRO
+      CREATE TABLE IF NOT EXISTS aluno_financeiro_config (
+        aluno_id INTEGER PRIMARY KEY,
+        plano TEXT NOT NULL DEFAULT 'Mensalidade Padrão',
+        valor REAL NOT NULL DEFAULT 0.0,
+        dia_vencimento INTEGER NOT NULL DEFAULT 10,
+        status TEXT NOT NULL DEFAULT 'Aguardando',
+        gateway_pagamento TEXT DEFAULT 'manual',
+        id_cliente_gateway TEXT,
+        id_assinatura_gateway TEXT,
+        status_gateway TEXT DEFAULT 'ativo',
+        proxima_cobranca TEXT,
+        ultima_sincronizacao TEXT,
+        atualizado_em TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS pagamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aluno_id INTEGER NOT NULL,
+        aluno_nome TEXT NOT NULL,
+        valor REAL NOT NULL DEFAULT 0.0,
+        data_pagamento TEXT NOT NULL,
+        mes_referencia TEXT NOT NULL,
+        forma_pagamento TEXT NOT NULL DEFAULT 'PIX',
+        status TEXT NOT NULL DEFAULT 'Pago',
+        observacao TEXT,
+        responsavel_registro TEXT NOT NULL,
+        responsavel_id TEXT,
+        criado_em TEXT NOT NULL,
+        atualizado_em TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pagamentos_aluno ON pagamentos(aluno_id);
+      CREATE INDEX IF NOT EXISTS idx_pagamentos_data ON pagamentos(data_pagamento);
+      CREATE INDEX IF NOT EXISTS idx_pagamentos_status ON pagamentos(status);
+
+      -- HISTÓRICO DE EVENTOS FINANCEIROS E GATEWAY
+      CREATE TABLE IF NOT EXISTS financeiro_eventos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        aluno_id INTEGER,
+        tipo_evento TEXT NOT NULL,
+        gateway TEXT NOT NULL DEFAULT 'manual',
+        valor REAL DEFAULT 0.0,
+        status TEXT NOT NULL,
+        descricao TEXT,
+        criado_em TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_aluno ON financeiro_eventos(aluno_id);
+      CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_tipo ON financeiro_eventos(tipo_evento);
+      CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_gateway ON financeiro_eventos(gateway);
+      CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_data ON financeiro_eventos(criado_em);
       
     `);
 
@@ -303,6 +424,14 @@ try {
     try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN responsavel_contato TEXT').run(); } catch (e) {}
     try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN proximo_passo TEXT').run(); } catch (e) {}
     try { realDb.prepare('ALTER TABLE pre_cadastros ADD COLUMN observacao_contato TEXT').run(); } catch (e) {}
+
+    // Add Gateway columns to aluno_financeiro_config if they don't exist
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN gateway_pagamento TEXT DEFAULT "manual"').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN id_cliente_gateway TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN id_assinatura_gateway TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN status_gateway TEXT DEFAULT "ativo"').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN proxima_cobranca TEXT').run(); } catch (e) {}
+    try { realDb.prepare('ALTER TABLE aluno_financeiro_config ADD COLUMN ultima_sincronizacao TEXT').run(); } catch (e) {}
 
     // Seed default admin user 'comando' if none exists
     const checkAdmin = realDb.prepare('SELECT id FROM admin_users WHERE username = ?');

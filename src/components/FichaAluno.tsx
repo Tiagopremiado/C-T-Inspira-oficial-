@@ -1,20 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, Download, FileText, User, Users, Shield, HeartPulse, Edit2, Save, Printer, Clock, Plus } from 'lucide-react';
-import { CadastroCompleto, PreCadastro, HistoricoAluno } from '../types.js';
+import { X, Send, Download, FileText, User, Users, Shield, HeartPulse, Edit2, Save, Printer, Clock, Plus, TrendingUp, CalendarCheck, MessageSquare, DollarSign } from 'lucide-react';
+import { CadastroCompleto, PreCadastro, HistoricoAluno, ResumoFrequencia } from '../types.js';
+import { EvolucaoAluno } from './EvolucaoAluno.js';
+import { FrequenciaAluno } from './FrequenciaAluno.js';
+import { ComunicacoesAluno } from './ComunicacoesAluno.js';
+import { FinanceiroAluno } from './FinanceiroAluno.js';
 
 interface FichaAlunoProps {
   preCadastro: PreCadastro;
   cadastroCompleto: CadastroCompleto | null;
+  currentUser?: {
+    id?: string;
+    username?: string;
+    role?: string;
+    nome?: string;
+  };
   onClose: () => void;
   onStatusChange: (status: string) => void;
   onSendWhatsApp: (phone: string, isResponsavel: boolean) => void;
 }
 
-type TabType = 'pessoais' | 'responsaveis' | 'saude' | 'documentos' | 'historico';
+type TabType = 'pessoais' | 'responsaveis' | 'saude' | 'documentos' | 'historico' | 'evolucao' | 'frequencia' | 'comunicacoes' | 'financeiro';
 
 export const FichaAluno: React.FC<FichaAlunoProps> = ({
   preCadastro,
   cadastroCompleto,
+  currentUser,
   onClose,
   onStatusChange,
   onSendWhatsApp
@@ -25,6 +36,7 @@ export const FichaAluno: React.FC<FichaAlunoProps> = ({
   const [historico, setHistorico] = useState<HistoricoAluno[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [docStatus, setDocStatus] = useState(preCadastro.documentacaoStatus || 'Pendente');
+  const [resumoFrequencia, setResumoFrequencia] = useState<ResumoFrequencia | null>(null);
   
   // Controle de atendimento state
   const [responsavelContato, setResponsavelContato] = useState(preCadastro.responsavelContato || '');
@@ -38,6 +50,23 @@ export const FichaAluno: React.FC<FichaAlunoProps> = ({
       fetchHistorico();
     }
   }, [activeTab]);
+
+  // Carregar resumo de frequência do aluno para o dashboard principal
+  useEffect(() => {
+    const fetchResumo = async () => {
+      try {
+        const token = localStorage.getItem('inspira_auth_token');
+        const res = await fetch(`/api/alunos/${preCadastro.id}/frequencia`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.resumo) setResumoFrequencia(data.resumo);
+        }
+      } catch (e) {}
+    };
+    fetchResumo();
+  }, [preCadastro.id]);
 
   const fetchHistorico = async () => {
     setLoadingHistorico(true);
@@ -189,6 +218,56 @@ export const FichaAluno: React.FC<FichaAlunoProps> = ({
           )}
         </div>
 
+        {/* Dashboard do Aluno: Resumo de Frequência na Ficha Principal (MÓDULO 7) */}
+        {resumoFrequencia && resumoFrequencia.totalTreinamentos > 0 && (
+          <div className="px-4 sm:px-6 py-2.5 bg-[rgba(245,195,59,0.03)] border-b border-[rgba(255,255,255,0.06)] flex flex-wrap items-center justify-between gap-3 text-xs print:hidden">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center gap-1.5 font-bold text-white">
+                <CalendarCheck className="w-4 h-4 text-[#f5c33b]" />
+                Presença:
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                    resumoFrequencia.percentualPresenca >= 85
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : resumoFrequencia.percentualPresenca >= 70
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                  }`}
+                >
+                  {resumoFrequencia.percentualPresenca}%
+                </span>
+              </span>
+
+              {resumoFrequencia.ultimosRegistros && resumoFrequencia.ultimosRegistros.length > 0 && (
+                <div className="hidden sm:flex items-center gap-1.5 text-[#8fa2ad]">
+                  <span className="text-[11px] font-semibold">Últimos registros:</span>
+                  {resumoFrequencia.ultimosRegistros.slice(0, 3).map((reg, i) => (
+                    <span
+                      key={i}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        reg.status === 'Presente'
+                          ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
+                          : reg.status === 'Ausente'
+                          ? 'text-rose-300 bg-rose-500/10 border-rose-500/20'
+                          : 'text-amber-300 bg-amber-500/10 border-amber-500/20'
+                      }`}
+                    >
+                      {reg.status === 'Justificada' ? 'Falta justificada' : reg.status}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setActiveTab('frequencia')}
+              className="text-[11px] text-[#f5c33b] hover:text-white font-bold flex items-center gap-1 transition"
+            >
+              Ver frequência completa ({resumoFrequencia.totalTreinamentos} treinos) →
+            </button>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex items-center overflow-x-auto border-b border-[rgba(255,255,255,0.08)] print:hidden">
           <button onClick={() => setActiveTab('pessoais')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'pessoais' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
@@ -206,6 +285,20 @@ export const FichaAluno: React.FC<FichaAlunoProps> = ({
           <button onClick={() => setActiveTab('historico')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'historico' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
             <Shield className="w-4 h-4" /> Histórico Inspira
           </button>
+          <button onClick={() => setActiveTab('evolucao')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'evolucao' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
+            <TrendingUp className="w-4 h-4" /> Evolução
+          </button>
+          <button onClick={() => setActiveTab('frequencia')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'frequencia' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
+            <CalendarCheck className="w-4 h-4" /> Frequência
+          </button>
+          <button onClick={() => setActiveTab('comunicacoes')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'comunicacoes' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
+            <MessageSquare className="w-4 h-4" /> Comunicações
+          </button>
+          {currentUser?.role !== 'Instrutor' && (
+            <button onClick={() => setActiveTab('financeiro')} className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition border-b-2 flex items-center gap-2 ${activeTab === 'financeiro' ? 'border-[#f5c33b] text-[#f5c33b] bg-[rgba(245,195,59,0.05)]' : 'border-transparent text-[#8fa2ad] hover:text-white hover:bg-[rgba(255,255,255,0.02)]'}`}>
+              <DollarSign className="w-4 h-4" /> Financeiro
+            </button>
+          )}
         </div>
 
         {/* Content Area */}
@@ -425,6 +518,52 @@ export const FichaAluno: React.FC<FichaAlunoProps> = ({
                 </div>
 
               </div>
+            </div>
+          )}
+
+          {/* Aba: Evolução e Avaliação de Desempenho (MÓDULO 6) */}
+          {activeTab === 'evolucao' && (
+            <div className="animate-in fade-in duration-300">
+              <EvolucaoAluno
+                alunoId={preCadastro.id}
+                nomeAluno={hasFull ? cadastroCompleto!.nome : preCadastro.nomeAluno}
+                currentUser={currentUser}
+              />
+            </div>
+          )}
+
+          {/* Aba: Controle de Frequência e Presença (MÓDULO 7) */}
+          {activeTab === 'frequencia' && (
+            <div className="animate-in fade-in duration-300">
+              <FrequenciaAluno
+                alunoId={preCadastro.id}
+                nomeAluno={hasFull ? cadastroCompleto!.nome : preCadastro.nomeAluno}
+                currentUser={currentUser}
+                onResumoUpdated={(updatedResumo) => setResumoFrequencia(updatedResumo)}
+              />
+            </div>
+          )}
+
+          {/* Aba: Comunicações e Avisos do Aluno (MÓDULO 8) */}
+          {activeTab === 'comunicacoes' && (
+            <div className="animate-in fade-in duration-300">
+              <ComunicacoesAluno
+                alunoId={preCadastro.id}
+                nomeAluno={hasFull ? cadastroCompleto!.nome : preCadastro.nomeAluno}
+                currentUser={currentUser}
+              />
+            </div>
+          )}
+
+          {/* Aba: Financeiro do Aluno (MÓDULO 9) */}
+          {activeTab === 'financeiro' && (
+            <div className="animate-in fade-in duration-300">
+              <FinanceiroAluno
+                alunoId={preCadastro.id}
+                nomeAluno={hasFull ? cadastroCompleto!.nome : preCadastro.nomeAluno}
+                currentUserRole={currentUser?.role}
+                currentUserName={currentUser?.nome || currentUser?.username}
+              />
             </div>
           )}
           

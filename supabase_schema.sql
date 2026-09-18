@@ -161,3 +161,167 @@ CREATE POLICY "Full access to service role" ON public.historico_aluno FOR ALL TO
 CREATE POLICY "Allow anon select and manage by service" ON public.historico_aluno FOR ALL TO anon USING (true) WITH CHECK (true);
 
 GRANT ALL ON TABLE public.historico_aluno TO postgres, anon, authenticated, service_role;
+
+-- 10. MÓDULO 6 — TABELA DE AVALIAÇÃO E EVOLUÇÃO DO ALUNO
+CREATE TABLE IF NOT EXISTS public.avaliacoes_aluno (
+  id BIGSERIAL PRIMARY KEY,
+  aluno_id BIGINT NOT NULL,
+  data_avaliacao DATE NOT NULL DEFAULT CURRENT_DATE,
+  instrutor_id TEXT,
+  instrutor_nome TEXT NOT NULL,
+  observacoes_gerais TEXT,
+  nota_disciplina INTEGER NOT NULL DEFAULT 3,
+  comentario_disciplina TEXT,
+  nota_responsabilidade INTEGER NOT NULL DEFAULT 3,
+  comentario_responsabilidade TEXT,
+  nota_trabalho_equipe INTEGER NOT NULL DEFAULT 3,
+  comentario_trabalho_equipe TEXT,
+  nota_lideranca INTEGER NOT NULL DEFAULT 3,
+  comentario_lideranca TEXT,
+  nota_comunicacao INTEGER NOT NULL DEFAULT 3,
+  comentario_comunicacao TEXT,
+  nota_participacao INTEGER NOT NULL DEFAULT 3,
+  comentario_participacao TEXT,
+  nota_superacao INTEGER NOT NULL DEFAULT 3,
+  comentario_superacao TEXT,
+  media_geral NUMERIC(3,2) NOT NULL DEFAULT 3.00,
+  metas JSONB DEFAULT '[]'::jsonb,
+  missoes JSONB DEFAULT '[]'::jsonb,
+  criado_em TIMESTAMPTZ DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_avaliacoes_aluno_id ON public.avaliacoes_aluno(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_avaliacoes_data ON public.avaliacoes_aluno(data_avaliacao);
+
+ALTER TABLE public.avaliacoes_aluno ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on avaliacoes" ON public.avaliacoes_aluno FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on avaliacoes" ON public.avaliacoes_aluno FOR ALL TO anon USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE public.avaliacoes_aluno TO postgres, anon, authenticated, service_role;
+
+-- 11. MÓDULO 7 — TABELA DE CONTROLE DE FREQUÊNCIA
+CREATE TABLE IF NOT EXISTS public.frequencia_aluno (
+  id BIGSERIAL PRIMARY KEY,
+  aluno_id BIGINT NOT NULL,
+  data DATE NOT NULL DEFAULT CURRENT_DATE,
+  atividade TEXT NOT NULL,
+  instrutor_id TEXT,
+  instrutor_nome TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('Presente', 'Ausente', 'Justificada')),
+  observacao TEXT,
+  criado_em TIMESTAMPTZ DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_frequencia_aluno_id ON public.frequencia_aluno(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_frequencia_data ON public.frequencia_aluno(data);
+
+ALTER TABLE public.frequencia_aluno ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on frequencia" ON public.frequencia_aluno FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on frequencia" ON public.frequencia_aluno FOR ALL TO anon USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE public.frequencia_aluno TO postgres, anon, authenticated, service_role;
+
+-- 12. MÓDULO 8 — TABELA DE COMUNICAÇÃO E AVISOS
+CREATE TABLE IF NOT EXISTS public.comunicados (
+  id BIGSERIAL PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  mensagem TEXT NOT NULL,
+  data DATE NOT NULL DEFAULT CURRENT_DATE,
+  tipo TEXT NOT NULL CHECK(tipo IN ('Geral', 'Alunos', 'Responsáveis', 'Individual')),
+  aluno_id BIGINT,
+  aluno_nome TEXT,
+  criado_por TEXT NOT NULL,
+  criador_id TEXT,
+  status TEXT NOT NULL DEFAULT 'Publicado' CHECK(status IN ('Publicado', 'Rascunho', 'Arquivado')),
+  observacao_interna TEXT,
+  criado_em TIMESTAMPTZ DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comunicados_data ON public.comunicados(data);
+CREATE INDEX IF NOT EXISTS idx_comunicados_tipo ON public.comunicados(tipo);
+CREATE INDEX IF NOT EXISTS idx_comunicados_aluno ON public.comunicados(aluno_id);
+
+ALTER TABLE public.comunicados ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on comunicados" ON public.comunicados FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on comunicados" ON public.comunicados FOR ALL TO anon USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE public.comunicados TO postgres, anon, authenticated, service_role;
+
+-- 13. MÓDULO 9 — FINANCEIRO (CONFIGURAÇÃO E HISTÓRICO DE PAGAMENTOS)
+CREATE TABLE IF NOT EXISTS public.aluno_financeiro_config (
+  aluno_id BIGINT PRIMARY KEY,
+  plano TEXT NOT NULL DEFAULT 'Mensalidade Padrão',
+  valor NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  dia_vencimento INTEGER NOT NULL DEFAULT 10,
+  status TEXT NOT NULL DEFAULT 'Aguardando' CHECK(status IN ('Pago', 'Aguardando', 'Atrasado')),
+  gateway_pagamento TEXT DEFAULT 'manual',
+  id_cliente_gateway TEXT,
+  id_assinatura_gateway TEXT,
+  status_gateway TEXT DEFAULT 'ativo',
+  proxima_cobranca DATE,
+  ultima_sincronizacao TIMESTAMPTZ,
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Garantir colunas de gateway em tabelas existentes
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS gateway_pagamento TEXT DEFAULT 'manual';
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS id_cliente_gateway TEXT;
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS id_assinatura_gateway TEXT;
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS status_gateway TEXT DEFAULT 'ativo';
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS proxima_cobranca DATE;
+ALTER TABLE public.aluno_financeiro_config ADD COLUMN IF NOT EXISTS ultima_sincronizacao TIMESTAMPTZ;
+
+ALTER TABLE public.aluno_financeiro_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on aluno_financeiro_config" ON public.aluno_financeiro_config FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on aluno_financeiro_config" ON public.aluno_financeiro_config FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.aluno_financeiro_config TO postgres, anon, authenticated, service_role;
+
+CREATE TABLE IF NOT EXISTS public.pagamentos (
+  id BIGSERIAL PRIMARY KEY,
+  aluno_id BIGINT NOT NULL,
+  aluno_nome TEXT NOT NULL,
+  valor NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  data_pagamento DATE NOT NULL DEFAULT CURRENT_DATE,
+  mes_referencia TEXT NOT NULL,
+  forma_pagamento TEXT NOT NULL DEFAULT 'PIX',
+  status TEXT NOT NULL DEFAULT 'Pago' CHECK(status IN ('Pago', 'Aguardando', 'Atrasado')),
+  observacao TEXT,
+  responsavel_registro TEXT NOT NULL,
+  responsavel_id TEXT,
+  criado_em TIMESTAMPTZ DEFAULT NOW(),
+  atualizado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pagamentos_aluno ON public.pagamentos(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_data ON public.pagamentos(data_pagamento);
+CREATE INDEX IF NOT EXISTS idx_pagamentos_status ON public.pagamentos(status);
+
+ALTER TABLE public.pagamentos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on pagamentos" ON public.pagamentos FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on pagamentos" ON public.pagamentos FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.pagamentos TO postgres, anon, authenticated, service_role;
+
+-- 14. MÓDULO 9: HISTÓRICO DE EVENTOS FINANCEIROS E INTEGRAÇÃO COM GATEWAYS
+CREATE TABLE IF NOT EXISTS public.financeiro_eventos (
+  id BIGSERIAL PRIMARY KEY,
+  aluno_id BIGINT,
+  tipo_evento TEXT NOT NULL, -- pagamento, cancelamento, alteração_plano, cobrança
+  gateway TEXT NOT NULL DEFAULT 'manual', -- manual, infinitypay, paggpay, etc.
+  valor NUMERIC(10,2) DEFAULT 0.00,
+  status TEXT NOT NULL, -- confirmado, pendente, falhou, cancelado, gerada
+  descricao TEXT,
+  criado_em TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_aluno ON public.financeiro_eventos(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_tipo ON public.financeiro_eventos(tipo_evento);
+CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_gateway ON public.financeiro_eventos(gateway);
+CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_criado_em ON public.financeiro_eventos(criado_em);
+
+ALTER TABLE public.financeiro_eventos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on financeiro_eventos" ON public.financeiro_eventos FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on financeiro_eventos" ON public.financeiro_eventos FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.financeiro_eventos TO postgres, anon, authenticated, service_role;

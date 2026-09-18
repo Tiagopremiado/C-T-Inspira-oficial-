@@ -3,7 +3,9 @@ import { PreCadastro, CadastroCompleto } from '../types.js';
 import { NovoAlunoModal } from './NovoAlunoModal.js';
 import { FichaAluno } from './FichaAluno.js';
 import { EquipeComando } from './EquipeComando.js';
-import { Menu, Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files } from 'lucide-react';
+import { ComunicacaoComando } from './ComunicacaoComando.js';
+import { FinanceiroComando } from './FinanceiroComando.js';
+import { Menu, Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, MessageSquare, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files, DollarSign } from 'lucide-react';
 
 interface ComandoGeralProps {
   onNavigate: (route: string) => void;
@@ -12,9 +14,12 @@ interface ComandoGeralProps {
 export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<'cadastros' | 'equipe'>('cadastros');
+  const [activeTab, setActiveTab] = useState<'cadastros' | 'equipe' | 'comunicacao' | 'financeiro'>('cadastros');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState('Administrador');
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+  const [currentUsername, setCurrentUsername] = useState<string>('');
+  const [currentUserName, setCurrentUserName] = useState<string>('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -89,6 +94,9 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
         if (data.authenticated) {
           setIsAuthenticated(true);
           if (data.role) setCurrentUserRole(data.role);
+          if (data.id) setCurrentUserId(String(data.id));
+          if (data.username) setCurrentUsername(data.username);
+          if (data.nome) setCurrentUserName(data.nome);
           loadCadastros(token || undefined);
           return;
         }
@@ -130,6 +138,12 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
 
       if (data?.token) {
         localStorage.setItem('inspira_auth_token', data.token);
+      }
+      if (data?.user) {
+        if (data.user.role) setCurrentUserRole(data.user.role);
+        if (data.user.id) setCurrentUserId(String(data.user.id));
+        if (data.user.username) setCurrentUsername(data.user.username);
+        if (data.user.nome) setCurrentUserName(data.user.nome);
       }
       
       if (rememberMe) {
@@ -622,6 +636,24 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
             <span>Cadastros</span>
           </button>
 
+          <button 
+            onClick={() => setActiveTab('comunicacao')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'comunicacao' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span>Comunicação</span>
+          </button>
+
+          {currentUserRole !== 'Instrutor' && (
+            <button 
+              onClick={() => setActiveTab('financeiro')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'financeiro' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+            >
+              <DollarSign className="w-5 h-5" />
+              <span>Financeiro</span>
+            </button>
+          )}
+
           {currentUserRole === 'Administrador' && (
             <button 
               onClick={() => setActiveTab('equipe')}
@@ -716,6 +748,24 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                   <span>Cadastros</span>
                 </button>
 
+                <button 
+                  onClick={() => { setActiveTab('comunicacao'); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'comunicacao' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span>Comunicação</span>
+                </button>
+
+                {currentUserRole !== 'Instrutor' && (
+                  <button 
+                    onClick={() => { setActiveTab('financeiro'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'financeiro' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+                  >
+                    <DollarSign className="w-5 h-5" />
+                    <span>Financeiro</span>
+                  </button>
+                )}
+
                 {currentUserRole === 'Administrador' && (
                   <button 
                     onClick={() => { setActiveTab('equipe'); setIsMobileMenuOpen(false); }}
@@ -768,7 +818,21 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
 
       {/* Main Content */}
       <main className="pt-8">
-        {activeTab === 'equipe' ? <EquipeComando currentUserRole={currentUserRole} /> : (
+        {activeTab === 'equipe' ? (
+          <EquipeComando currentUserRole={currentUserRole} />
+        ) : activeTab === 'comunicacao' ? (
+          <ComunicacaoComando
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName || currentUsername}
+          />
+        ) : activeTab === 'financeiro' ? (
+          <FinanceiroComando
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName || currentUsername}
+          />
+        ) : (
         <div className="w-full max-w-[1180px] mx-auto px-4 sm:px-6">
           {/* Dashboard Head */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
@@ -1014,6 +1078,12 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
         <FichaAluno
           preCadastro={selectedAluno}
           cadastroCompleto={selectedFull}
+          currentUser={{
+            id: currentUserId,
+            username: currentUsername,
+            role: currentUserRole,
+            nome: currentUserName
+          }}
           onClose={() => {
             setSelectedAluno(null);
             setSelectedFull(null);

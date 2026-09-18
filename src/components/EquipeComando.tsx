@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Shield, Edit, Ban, CheckCircle, Search, Save, X, Eye, Trash2 } from 'lucide-react';
+import { UserPlus, Shield, Edit, Ban, CheckCircle, Search, Save, X, Eye, Trash2, AlertTriangle } from 'lucide-react';
 
 interface User {
   id: string;
@@ -42,6 +42,7 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
   });
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -149,10 +150,11 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
 
   
   const handleDelete = async (user: User) => {
+    setActionMessage(null);
     setConfirmDialog({
       isOpen: true,
       title: 'Confirmar Exclusão',
-      message: `Tem certeza que deseja APAGAR o usuário ${user.nome_completo}?`,
+      message: `Tem certeza que deseja APAGAR o usuário ${user.nome_completo}? Esta ação é irreversível.`,
       onConfirm: async () => {
         try {
           const token = localStorage.getItem('inspira_auth_token');
@@ -160,20 +162,29 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
+          const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || 'Erro ao remover usuário');
+            throw new Error(data.error || 'Erro ao remover usuário');
           }
+          setActionMessage({
+            text: data.message || `Usuário ${user.nome_completo} excluído com sucesso!`,
+            type: 'success'
+          });
           loadUsers();
           setConfirmDialog(null);
         } catch (err: any) {
-          setFormError(err.message || 'Erro ao remover usuário');
+          setActionMessage({
+            text: err.message || 'Erro ao remover usuário.',
+            type: 'error'
+          });
+          setConfirmDialog(null);
         }
       }
     });
   };
 
   const handleToggleStatus = async (user: User) => {
+    setActionMessage(null);
     const actionName = user.status === 'Ativo' ? 'BLOQUEAR' : 'ATIVAR';
     setConfirmDialog({
       isOpen: true,
@@ -190,14 +201,22 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
             },
             body: JSON.stringify({ status: user.status === 'Ativo' ? 'Bloqueado' : 'Ativo' })
           });
+          const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            const data = await res.json();
             throw new Error(data.error || 'Erro desconhecido ao bloquear/ativar');
           }
+          setActionMessage({
+            text: `Usuário ${user.nome_completo} ${user.status === 'Ativo' ? 'bloqueado' : 'ativado'} com sucesso!`,
+            type: 'success'
+          });
           loadUsers();
           setConfirmDialog(null);
         } catch (err: any) {
-          setFormError(err.message || 'Erro ao atualizar status do usuário.');
+          setActionMessage({
+            text: err.message || 'Erro ao atualizar status do usuário.',
+            type: 'error'
+          });
+          setConfirmDialog(null);
         }
       }
     });
@@ -241,6 +260,31 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
           </button>
         </div>
       </div>
+
+      {actionMessage && (
+        <div
+          className={`mb-6 p-4 rounded-xl text-sm flex items-center justify-between border animate-in fade-in duration-200 ${
+            actionMessage.type === 'success'
+              ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
+              : 'bg-red-950/50 border-red-500/40 text-red-300'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {actionMessage.type === 'success' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            )}
+            <span className="font-semibold">{actionMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setActionMessage(null)}
+            className="text-xs font-bold hover:underline ml-4 px-2 py-1 rounded bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)] transition"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+      )}
 
       <div className="mb-6 relative">
         <Search className="w-5 h-5 text-[#8fa2ad] absolute left-3.5 top-3.5 pointer-events-none" />
@@ -337,6 +381,41 @@ export const EquipeComando: React.FC<EquipeComandoProps> = ({ currentUserRole })
           </table>
         </div>
       </div>
+
+      {/* Diálogo de Confirmação Personalizado */}
+      {confirmDialog && confirmDialog.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setConfirmDialog(null)} />
+          <div className="relative w-full max-w-md bg-[#0b1b26] border border-[#1a2e3d] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">{confirmDialog.title}</h3>
+                <p className="text-sm text-[#8fa2ad] mt-0.5">{confirmDialog.message}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 rounded-xl bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)] text-[#9dafb9] text-sm font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => confirmDialog.onConfirm()}
+                className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold shadow-lg transition"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">

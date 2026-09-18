@@ -7,6 +7,7 @@ import multer from 'multer';
 import cookieParser from 'cookie-parser';
 import { db, hashPassword, verifyPassword } from './server/db.js';
 import { dataService } from './server/dataService.js';
+import { gatewayService, gatewayRegistry } from './server/gatewayService.js';
 import { isSupabaseConfigured, testSupabaseConnection, getSupabase } from './server/supabase.js';
 
 const app = express();
@@ -106,7 +107,12 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
       }
       
       if (data.user.user_metadata?.status === 'Bloqueado') { res.status(403).json({ error: 'Conta bloqueada.' }); return; }
-      (req as any).user = { id: data.user.id, username: data.user.email, role: data.user.user_metadata?.funcao || 'Administrador' };
+      (req as any).user = {
+        id: data.user.id,
+        username: data.user.email,
+        role: data.user.user_metadata?.funcao || 'Administrador',
+        nome: data.user.user_metadata?.nome_completo || data.user.email
+      };
       next();
     } else {
       // Local fallback
@@ -123,7 +129,12 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
         return;
       }
       const userRow = db.prepare('SELECT username FROM admin_users WHERE id = ?').get(row.user_id) as any;
-      (req as any).user = { id: row.user_id, username: userRow?.username || 'admin', role: 'Administrador' };
+      (req as any).user = {
+        id: row.user_id,
+        username: userRow?.username || 'admin',
+        role: 'Administrador',
+        nome: userRow?.username || 'Administrador'
+      };
       next();
     }
   } catch (err) {
@@ -294,7 +305,14 @@ app.get('/api/auth/me', async (req, res) => {
         res.json({ authenticated: false });
         return;
       }
-      res.json({ authenticated: true, username: data.user.email, role: data.user.user_metadata?.funcao || 'Administrador', status: data.user.user_metadata?.status || 'Ativo', id: data.user.id });
+      res.json({
+        authenticated: true,
+        username: data.user.email,
+        nome: data.user.user_metadata?.nome_completo || data.user.email,
+        role: data.user.user_metadata?.funcao || 'Administrador',
+        status: data.user.user_metadata?.status || 'Ativo',
+        id: data.user.id
+      });
       return;
     }
 
@@ -305,7 +323,14 @@ app.get('/api/auth/me', async (req, res) => {
       return;
     }
 
-    res.json({ authenticated: true, username: session.username });
+    res.json({
+      authenticated: true,
+      username: session.username,
+      nome: session.username,
+      role: 'Administrador',
+      status: 'Ativo',
+      id: String(session.user_id)
+    });
   } catch (error: any) {
     res.json({ authenticated: false });
   }
@@ -546,6 +571,858 @@ app.delete('/api/pre-cadastros/:id', requireAuth, async (req, res) => {
   } catch (error: any) {
     console.error('Error deleting cadastro:', error);
     res.status(500).json({ error: 'Erro ao excluir cadastro.' });
+  }
+});
+
+// -------------------------------------------------------------
+// MÓDULO 6: AVALIAÇÃO E EVOLUÇÃO DO ALUNO
+// -------------------------------------------------------------
+
+app.get('/api/alunos/:id/avaliacoes', requireAuth, async (req, res) => {
+  try {
+    const alunoId = Number(req.params.id);
+    const avaliacoes = await dataService.getAvaliacoesAluno(alunoId);
+    res.json(avaliacoes);
+  } catch (err: any) {
+    console.error('Error fetching avaliacoes:', err);
+    res.status(500).json({ error: err.message || 'Erro ao carregar avaliações do aluno.' });
+  }
+});
+
+app.post('/api/alunos/:id/avaliacoes', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role !== 'Administrador' && role !== 'Instrutor') {
+      res.status(403).json({ error: 'Apenas Administradores e Instrutores podem registrar avaliações.' });
+      return;
+    }
+
+    const alunoId = Number(req.params.id);
+    const { dataAvaliacao, instrutorNome, observacoesGerais, competencias, metas, missoes } = req.body;
+
+    const loggedUser = (req as any).user;
+    const resolvedInstrutorNome = (instrutorNome && instrutorNome.trim()) ? instrutorNome.trim() : (loggedUser?.nome || loggedUser?.username || 'Instrutor');
+    const instrutorId = loggedUser?.id ? String(loggedUser.id) : undefined;
+
+    const created = await dataService.createAvaliacaoAluno({
+      alunoId,
+      dataAvaliacao,
+      instrutorId,
+      instrutorNome: resolvedInstrutorNome,
+      observacoesGerais,
+      competencias,
+      metas,
+      missoes
+    });
+
+    // Auditoria no histórico do aluno
+    try {
+      await dataService.addHistorico(
+        alunoId,
+        'Evolucao' as any,
+        `Avaliação de competências registrada por ${resolvedInstrutorNome}. Média geral: ${created.mediaGeral.toFixed(1)}/5.0`,
+        loggedUser?.nome || loggedUser?.username || 'Comando Geral'
+      );
+    } catch (e) {
+      console.warn('Erro ao salvar auditoria de avaliacao:', e);
+    }
+
+    res.status(201).json(created);
+  } catch (err: any) {
+    console.error('Error creating avaliacao:', err);
+    res.status(500).json({ error: err.message || 'Erro ao criar avaliação do aluno.' });
+  }
+});
+
+app.put('/api/avaliacoes/:id', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await dataService.getAvaliacaoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Avaliação não encontrada.' });
+      return;
+    }
+
+    const role = (req as any).user?.role || 'Instrutor';
+    const loggedUser = (req as any).user;
+
+    // Regra de permissão: Admin pode editar qualquer avaliação.
+    // Instrutor só pode editar se for a sua própria avaliação.
+    if (role !== 'Administrador') {
+      const isOwner = (existing.instrutorId && loggedUser?.id && String(existing.instrutorId) === String(loggedUser.id)) ||
+        (existing.instrutorNome && loggedUser?.nome && existing.instrutorNome.toLowerCase() === loggedUser.nome.toLowerCase()) ||
+        (existing.instrutorNome && loggedUser?.username && existing.instrutorNome.toLowerCase() === loggedUser.username.toLowerCase());
+      
+      if (!isOwner) {
+        res.status(403).json({ error: 'Permissão negada. Apenas o instrutor responsável ou administradores podem editar esta avaliação.' });
+        return;
+      }
+    }
+
+    const { dataAvaliacao, instrutorNome, observacoesGerais, competencias, metas, missoes } = req.body;
+
+    const updated = await dataService.updateAvaliacaoAluno(id, {
+      alunoId: existing.alunoId,
+      dataAvaliacao: dataAvaliacao || existing.dataAvaliacao,
+      instrutorId: existing.instrutorId,
+      instrutorNome: (instrutorNome && instrutorNome.trim()) ? instrutorNome.trim() : existing.instrutorNome,
+      observacoesGerais,
+      competencias,
+      metas,
+      missoes
+    });
+
+    // Auditoria
+    try {
+      await dataService.addHistorico(
+        existing.alunoId,
+        'Evolucao' as any,
+        `Avaliação de ${updated.dataAvaliacao} atualizada por ${loggedUser?.nome || loggedUser?.username || 'Comando Geral'} (Nova média: ${updated.mediaGeral.toFixed(1)}/5.0)`,
+        loggedUser?.nome || loggedUser?.username || 'Comando Geral'
+      );
+    } catch (e) {}
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('Error updating avaliacao:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar avaliação.' });
+  }
+});
+
+app.delete('/api/avaliacoes/:id', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role;
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas administradores podem excluir avaliações.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getAvaliacaoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Avaliação não encontrada.' });
+      return;
+    }
+
+    await dataService.deleteAvaliacaoAluno(id);
+
+    const loggedUser = (req as any).user;
+    try {
+      await dataService.addHistorico(
+        existing.alunoId,
+        'Evolucao' as any,
+        `Avaliação de ${existing.dataAvaliacao} (Instrutor: ${existing.instrutorNome}) foi excluída por ${loggedUser?.nome || loggedUser?.username || 'Administrador'}`,
+        loggedUser?.nome || loggedUser?.username || 'Administrador'
+      );
+    } catch (e) {}
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting avaliacao:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir avaliação.' });
+  }
+});
+
+// -------------------------------------------------------------
+// MÓDULO 7: CONTROLE DE FREQUÊNCIA
+// -------------------------------------------------------------
+
+app.get('/api/alunos/:id/frequencia', requireAuth, async (req, res) => {
+  try {
+    const alunoId = Number(req.params.id);
+    const frequencias = await dataService.getFrequenciasAluno(alunoId);
+    const resumo = await dataService.getResumoFrequencia(alunoId);
+    res.json({ frequencias, resumo });
+  } catch (err: any) {
+    console.error('Error fetching frequencia:', err);
+    res.status(500).json({ error: err.message || 'Erro ao carregar registros de frequência do aluno.' });
+  }
+});
+
+app.post('/api/alunos/:id/frequencia', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role !== 'Administrador' && role !== 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores e Instrutores podem registrar frequência.' });
+      return;
+    }
+
+    const alunoId = Number(req.params.id);
+    const { data: dataTreino, atividade, status, observacao, instrutorNome } = req.body;
+
+    if (!atividade || !atividade.trim()) {
+      res.status(400).json({ error: 'Nome do treinamento ou atividade é obrigatório.' });
+      return;
+    }
+
+    if (!['Presente', 'Ausente', 'Justificada'].includes(status)) {
+      res.status(400).json({ error: 'Status inválido. Deve ser Presente, Ausente ou Justificada.' });
+      return;
+    }
+
+    const loggedUser = (req as any).user;
+    const resolvedInstrutorNome = (instrutorNome && instrutorNome.trim())
+      ? instrutorNome.trim()
+      : (loggedUser?.nome || loggedUser?.username || 'Instrutor');
+    const instrutorId = loggedUser?.id ? String(loggedUser.id) : undefined;
+
+    const created = await dataService.createFrequenciaAluno({
+      alunoId,
+      data: dataTreino,
+      atividade: atividade.trim(),
+      instrutorId,
+      instrutorNome: resolvedInstrutorNome,
+      status,
+      observacao: observacao?.trim() || ''
+    });
+
+    // Auditoria no histórico do aluno
+    try {
+      const statusLabel = status === 'Presente' ? 'Presença' : status === 'Ausente' ? 'Falta' : 'Falta justificada';
+      await dataService.addHistorico(
+        alunoId,
+        'Frequencia' as any,
+        `Frequência registrada: ${statusLabel} em "${atividade.trim()}" (Instrutor: ${resolvedInstrutorNome})`,
+        loggedUser?.nome || loggedUser?.username || 'Comando Geral'
+      );
+    } catch (e) {
+      console.warn('Erro ao registrar histórico de frequência:', e);
+    }
+
+    const resumo = await dataService.getResumoFrequencia(alunoId);
+    res.status(201).json({ frequencia: created, resumo });
+  } catch (err: any) {
+    console.error('Error creating frequencia:', err);
+    res.status(500).json({ error: err.message || 'Erro ao registrar frequência.' });
+  }
+});
+
+app.put('/api/frequencia/:id', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await dataService.getFrequenciaById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Registro de frequência não encontrado.' });
+      return;
+    }
+
+    const role = (req as any).user?.role || 'Instrutor';
+    const loggedUser = (req as any).user;
+
+    // Regra: Administrador pode editar qualquer um; Instrutor só edita os seus próprios registros
+    if (role !== 'Administrador') {
+      if (role !== 'Instrutor') {
+        res.status(403).json({ error: 'Permissão negada. Apenas Administradores e Instrutores podem editar frequência.' });
+        return;
+      }
+      const isOwnerById = loggedUser?.id && existing.instrutorId && String(existing.instrutorId) === String(loggedUser.id);
+      const isOwnerByName = loggedUser?.nome && existing.instrutorNome && existing.instrutorNome.toLowerCase() === loggedUser.nome.toLowerCase();
+      const isOwnerByUsername = loggedUser?.username && existing.instrutorNome && existing.instrutorNome.toLowerCase() === loggedUser.username.toLowerCase();
+
+      if (!isOwnerById && !isOwnerByName && !isOwnerByUsername) {
+        res.status(403).json({ error: 'Permissão negada. Você só pode editar registros de frequência criados por você.' });
+        return;
+      }
+    }
+
+    const { data: dataTreino, atividade, status, observacao, instrutorNome } = req.body;
+
+    if (status && !['Presente', 'Ausente', 'Justificada'].includes(status)) {
+      res.status(400).json({ error: 'Status inválido. Deve ser Presente, Ausente ou Justificada.' });
+      return;
+    }
+
+    const updated = await dataService.updateFrequenciaAluno(id, {
+      data: dataTreino,
+      atividade: atividade?.trim(),
+      status,
+      observacao: observacao?.trim(),
+      instrutorNome: instrutorNome?.trim()
+    });
+
+    // Auditoria
+    try {
+      await dataService.addHistorico(
+        existing.alunoId,
+        'Frequencia' as any,
+        `Frequência de ${updated?.data} ("${updated?.atividade}") atualizada para "${updated?.status}" por ${loggedUser?.nome || loggedUser?.username || 'Comando Geral'}`,
+        loggedUser?.nome || loggedUser?.username || 'Comando Geral'
+      );
+    } catch (e) {}
+
+    const resumo = await dataService.getResumoFrequencia(existing.alunoId);
+    res.json({ frequencia: updated, resumo });
+  } catch (err: any) {
+    console.error('Error updating frequencia:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar frequência.' });
+  }
+});
+
+app.delete('/api/frequencia/:id', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role;
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores podem excluir registros de frequência.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getFrequenciaById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Registro de frequência não encontrado.' });
+      return;
+    }
+
+    await dataService.deleteFrequenciaAluno(id);
+
+    const loggedUser = (req as any).user;
+    try {
+      await dataService.addHistorico(
+        existing.alunoId,
+        'Frequencia' as any,
+        `Registro de frequência de ${existing.data} ("${existing.atividade}", Status: ${existing.status}) excluído por ${loggedUser?.nome || loggedUser?.username || 'Administrador'}`,
+        loggedUser?.nome || loggedUser?.username || 'Administrador'
+      );
+    } catch (e) {}
+
+    const resumo = await dataService.getResumoFrequencia(existing.alunoId);
+    res.json({ success: true, resumo });
+  } catch (err: any) {
+    console.error('Error deleting frequencia:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir frequência.' });
+  }
+});
+
+// -------------------------------------------------------------
+// MÓDULO 8: COMUNICAÇÃO
+// -------------------------------------------------------------
+
+app.get('/api/comunicados', requireAuth, async (req, res) => {
+  try {
+    const { tipo, status, alunoId, search } = req.query;
+    const comunicados = await dataService.getComunicados({
+      tipo: tipo ? String(tipo) : undefined,
+      status: status ? String(status) : undefined,
+      alunoId: alunoId ? Number(alunoId) : undefined,
+      search: search ? String(search) : undefined
+    });
+    res.json({ comunicados });
+  } catch (err: any) {
+    console.error('Error fetching comunicados:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar comunicados.' });
+  }
+});
+
+app.get('/api/comunicados/:id', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const comunicado = await dataService.getComunicadoById(id);
+    if (!comunicado) {
+      res.status(404).json({ error: 'Comunicado não encontrado.' });
+      return;
+    }
+    res.json({ comunicado });
+  } catch (err: any) {
+    console.error('Error fetching comunicado by id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar comunicado.' });
+  }
+});
+
+app.get('/api/alunos/:id/comunicados', requireAuth, async (req, res) => {
+  try {
+    const alunoId = Number(req.params.id);
+    const comunicados = await dataService.getComunicadosByAluno(alunoId);
+    res.json({ comunicados });
+  } catch (err: any) {
+    console.error('Error fetching aluno comunicados:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar comunicados do aluno.' });
+  }
+});
+
+app.post('/api/comunicados', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+
+    if (role === 'Secretaria') {
+      res.status(403).json({ error: 'Permissão negada. A Secretaria possui acesso somente de visualização.' });
+      return;
+    }
+
+    const { titulo, mensagem, data, tipo, alunoId, alunoNome, status, observacaoInterna } = req.body;
+
+    if (!titulo || !titulo.trim()) {
+      res.status(400).json({ error: 'O título do comunicado é obrigatório.' });
+      return;
+    }
+    if (!mensagem || !mensagem.trim()) {
+      res.status(400).json({ error: 'A mensagem do comunicado é obrigatória.' });
+      return;
+    }
+
+    const criadoPor = user?.nome || user?.username || 'Comando Geral';
+    const criadorId = user?.id ? String(user.id) : null;
+
+    let targetAlunoNome = alunoNome;
+    if (tipo === 'Individual' && alunoId && !targetAlunoNome) {
+      const aluno = await dataService.getPreCadastroById(Number(alunoId));
+      if (aluno) {
+        targetAlunoNome = aluno.nome;
+      }
+    }
+
+    const created = await dataService.createComunicado({
+      titulo: titulo.trim(),
+      mensagem: mensagem.trim(),
+      data,
+      tipo: tipo || 'Geral',
+      alunoId: tipo === 'Individual' && alunoId ? Number(alunoId) : null,
+      alunoNome: tipo === 'Individual' ? targetAlunoNome : null,
+      criadoPor,
+      criadorId,
+      status: status || 'Publicado',
+      observacaoInterna: observacaoInterna ? observacaoInterna.trim() : ''
+    });
+
+    // Se associado a um aluno, adiciona ao histórico oficial do aluno
+    if (tipo === 'Individual' && alunoId) {
+      try {
+        await dataService.addHistorico(
+          Number(alunoId),
+          'Comunicado' as any,
+          `Comunicado individual criado: "${titulo.trim()}" por ${criadoPor}`,
+          criadoPor
+        );
+      } catch (e) {}
+    } else {
+      // Registro geral de histórico no sistema
+      try {
+        await dataService.addHistorico(
+          0,
+          'Comunicado' as any,
+          `Novo comunicado público (${tipo}): "${titulo.trim()}" por ${criadoPor}`,
+          criadoPor
+        );
+      } catch (e) {}
+    }
+
+    res.status(201).json({ comunicado: created });
+  } catch (err: any) {
+    console.error('Error creating comunicado:', err);
+    res.status(500).json({ error: err.message || 'Erro ao registrar comunicado.' });
+  }
+});
+
+app.put('/api/comunicados/:id', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+
+    if (role === 'Secretaria') {
+      res.status(403).json({ error: 'Permissão negada. A Secretaria possui acesso somente de visualização.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getComunicadoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Comunicado não encontrado.' });
+      return;
+    }
+
+    // Se for Instrutor, pode editar somente os comunicados que ele mesmo criou
+    if (role !== 'Administrador') {
+      const isOwner = (existing.criadorId && String(existing.criadorId) === String(user.id)) ||
+                      (existing.criadoPor && existing.criadoPor === (user.nome || user.username));
+      if (!isOwner) {
+        res.status(403).json({ error: 'Permissão negada. Instrutores podem editar apenas comunicados criados por si mesmos.' });
+        return;
+      }
+    }
+
+    const { titulo, mensagem, data, tipo, alunoId, alunoNome, status, observacaoInterna } = req.body;
+
+    let targetAlunoNome = alunoNome;
+    if (tipo === 'Individual' && alunoId && !targetAlunoNome) {
+      const aluno = await dataService.getPreCadastroById(Number(alunoId));
+      if (aluno) {
+        targetAlunoNome = aluno.nome;
+      }
+    }
+
+    const updated = await dataService.updateComunicado(id, {
+      titulo: titulo ? titulo.trim() : undefined,
+      mensagem: mensagem ? mensagem.trim() : undefined,
+      data,
+      tipo,
+      alunoId: tipo === 'Individual' ? (alunoId ? Number(alunoId) : null) : null,
+      alunoNome: tipo === 'Individual' ? targetAlunoNome : null,
+      status,
+      observacaoInterna: observacaoInterna !== undefined ? observacaoInterna.trim() : undefined
+    });
+
+    const actor = user?.nome || user?.username || 'Comando Geral';
+    if (updated?.alunoId) {
+      try {
+        await dataService.addHistorico(
+          updated.alunoId,
+          'Comunicado' as any,
+          `Comunicado "${updated.titulo}" editado por ${actor}`,
+          actor
+        );
+      } catch (e) {}
+    }
+
+    res.json({ comunicado: updated });
+  } catch (err: any) {
+    console.error('Error updating comunicado:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar comunicado.' });
+  }
+});
+
+app.delete('/api/comunicados/:id', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role;
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores podem excluir comunicados.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getComunicadoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Comunicado não encontrado.' });
+      return;
+    }
+
+    await dataService.deleteComunicado(id);
+
+    const loggedUser = (req as any).user;
+    const actor = loggedUser?.nome || loggedUser?.username || 'Administrador';
+
+    if (existing.alunoId) {
+      try {
+        await dataService.addHistorico(
+          existing.alunoId,
+          'Comunicado' as any,
+          `Comunicado "${existing.titulo}" (${existing.tipo}) excluído por ${actor}`,
+          actor
+        );
+      } catch (e) {}
+    } else {
+      try {
+        await dataService.addHistorico(
+          0,
+          'Comunicado' as any,
+          `Comunicado público "${existing.titulo}" (${existing.tipo}) excluído por ${actor}`,
+          actor
+        );
+      } catch (e) {}
+    }
+
+    res.json({ success: true, message: `Comunicado "${existing.titulo}" excluído com sucesso.` });
+  } catch (err: any) {
+    console.error('Error deleting comunicado:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir comunicado.' });
+  }
+});
+
+// -------------------------------------------------------------
+// MÓDULO 9: FINANCEIRO
+// -------------------------------------------------------------
+
+// Obter estatísticas do dashboard financeiro
+app.get('/api/financeiro/stats', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso ao módulo financeiro.' });
+      return;
+    }
+
+    const stats = await dataService.getFinanceiroDashboardStats();
+    res.json({ stats });
+  } catch (err: any) {
+    console.error('Error in GET /api/financeiro/stats:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar dados financeiros.' });
+  }
+});
+
+// Listar pagamentos (com filtros por alunoId ou status)
+app.get('/api/financeiro/pagamentos', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso ao módulo financeiro.' });
+      return;
+    }
+
+    const alunoId = req.query.alunoId ? Number(req.query.alunoId) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+
+    const pagamentos = await dataService.getPagamentos(alunoId, status);
+    res.json({ pagamentos });
+  } catch (err: any) {
+    console.error('Error in GET /api/financeiro/pagamentos:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar pagamentos.' });
+  }
+});
+
+// Registrar novo pagamento
+app.post('/api/financeiro/pagamentos', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso ao módulo financeiro.' });
+      return;
+    }
+
+    const { alunoId, alunoNome, valor, dataPagamento, mesReferencia, formaPagamento, status, observacao } = req.body;
+
+    if (!alunoId) {
+      res.status(400).json({ error: 'Identificação do aluno é obrigatória.' });
+      return;
+    }
+
+    const created = await dataService.createPagamento({
+      alunoId: Number(alunoId),
+      alunoNome,
+      valor: Number(valor) || 0,
+      dataPagamento: dataPagamento || new Date().toISOString().split('T')[0],
+      mesReferencia: (mesReferencia || '').trim() || 'Mensalidade',
+      formaPagamento: formaPagamento || 'PIX',
+      status: (status || 'Pago') as any,
+      observacao,
+      responsavelRegistro: user?.nome || user?.username || 'Administrador',
+      responsavelId: user?.id ? String(user.id) : undefined
+    });
+
+    res.status(201).json({ pagamento: created });
+  } catch (err: any) {
+    console.error('Error in POST /api/financeiro/pagamentos:', err);
+    res.status(500).json({ error: err.message || 'Erro ao registrar pagamento.' });
+  }
+});
+
+// Editar pagamento existente (Apenas Administrador)
+app.put('/api/financeiro/pagamentos/:id', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores podem editar registros financeiros.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getPagamentoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Pagamento não encontrado.' });
+      return;
+    }
+
+    const { alunoId, alunoNome, valor, dataPagamento, mesReferencia, formaPagamento, status, observacao } = req.body;
+
+    const updated = await dataService.updatePagamento(id, {
+      alunoId: alunoId !== undefined ? Number(alunoId) : undefined,
+      alunoNome,
+      valor: valor !== undefined ? Number(valor) : undefined,
+      dataPagamento,
+      mesReferencia,
+      formaPagamento,
+      status,
+      observacao,
+      responsavelRegistro: user?.nome || user?.username || 'Administrador'
+    });
+
+    res.json({ pagamento: updated });
+  } catch (err: any) {
+    console.error('Error in PUT /api/financeiro/pagamentos/:id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar pagamento.' });
+  }
+});
+
+// Excluir pagamento (Apenas Administrador)
+app.delete('/api/financeiro/pagamentos/:id', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores podem excluir registros financeiros.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const existing = await dataService.getPagamentoById(id);
+    if (!existing) {
+      res.status(404).json({ error: 'Pagamento não encontrado.' });
+      return;
+    }
+
+    await dataService.deletePagamento(id, user?.nome || user?.username || 'Administrador');
+    res.json({ success: true, message: 'Registro financeiro excluído com sucesso.' });
+  } catch (err: any) {
+    console.error('Error in DELETE /api/financeiro/pagamentos/:id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir pagamento.' });
+  }
+});
+
+// Obter configuração e histórico financeiro do aluno
+app.get('/api/financeiro/aluno/:alunoId', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso ao módulo financeiro.' });
+      return;
+    }
+
+    const alunoId = Number(req.params.alunoId);
+    const config = await dataService.getAlunoFinanceiroConfig(alunoId);
+    const pagamentos = await dataService.getPagamentos(alunoId);
+
+    res.json({ config, pagamentos });
+  } catch (err: any) {
+    console.error('Error in GET /api/financeiro/aluno/:alunoId:', err);
+    res.status(500).json({ error: err.message || 'Erro ao carregar dados financeiros do aluno.' });
+  }
+});
+
+// Atualizar configuração financeira do aluno (Plano, Valor, Dia de Vencimento, Status, Gateway)
+app.put('/api/financeiro/aluno/:alunoId', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso ao módulo financeiro.' });
+      return;
+    }
+
+    const alunoId = Number(req.params.alunoId);
+    const {
+      plano,
+      valor,
+      diaVencimento,
+      status,
+      gatewayPagamento,
+      idClienteGateway,
+      idAssinaturaGateway,
+      statusGateway,
+      proximaCobranca,
+      ultimaSincronizacao
+    } = req.body;
+
+    const updated = await dataService.saveAlunoFinanceiroConfig({
+      alunoId,
+      plano: plano || 'Mensalidade Padrão',
+      valor: Number(valor) || 0,
+      diaVencimento: Number(diaVencimento) || 10,
+      status: (status || 'Aguardando') as any,
+      gatewayPagamento,
+      idClienteGateway,
+      idAssinaturaGateway,
+      statusGateway,
+      proximaCobranca,
+      ultimaSincronizacao,
+      userName: user?.nome || user?.username || 'Administrador'
+    });
+
+    res.json({ config: updated });
+  } catch (err: any) {
+    console.error('Error in PUT /api/financeiro/aluno/:alunoId:', err);
+    res.status(500).json({ error: err.message || 'Erro ao salvar configuração financeira do aluno.' });
+  }
+});
+
+// Listar eventos financeiros (para auditoria e sincronização com gateways)
+app.get('/api/financeiro/eventos', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem acesso aos eventos financeiros.' });
+      return;
+    }
+
+    const alunoId = req.query.alunoId ? Number(req.query.alunoId) : undefined;
+    const gateway = req.query.gateway ? String(req.query.gateway) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+    const eventos = await dataService.getFinanceiroEventos(alunoId, gateway, limit);
+    res.json({ eventos });
+  } catch (err: any) {
+    console.error('Error in GET /api/financeiro/eventos:', err);
+    res.status(500).json({ error: err.message || 'Erro ao carregar eventos financeiros.' });
+  }
+});
+
+// Listar gateways de pagamento registrados no sistema
+app.get('/api/financeiro/gateways', requireAuth, async (req, res) => {
+  try {
+    const gateways = gatewayRegistry.getRegisteredGateways();
+    res.json({ gateways });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erro ao listar gateways de pagamento.' });
+  }
+});
+
+// Gerar cobrança para responsável (via Gateway configurado)
+app.post('/api/financeiro/aluno/:alunoId/gerar-cobranca', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const role = user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não possuem permissão para emitir cobranças.' });
+      return;
+    }
+
+    const alunoId = Number(req.params.alunoId);
+    const { valor, vencimento, gateway, mesReferencia, descricao } = req.body;
+
+    const resultado = await gatewayService.gerarCobrancaParaResponsavel(alunoId, {
+      valor: valor !== undefined ? Number(valor) : undefined,
+      vencimento,
+      gateway,
+      mesReferencia,
+      descricao,
+      userName: user?.nome || user?.username || 'Administrador'
+    });
+
+    res.json(resultado);
+  } catch (err: any) {
+    console.error('Error in POST /api/financeiro/aluno/:alunoId/gerar-cobranca:', err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar cobrança para responsável.' });
+  }
+});
+
+// Webhook para receber confirmações automáticas de pagamento de gateways externos (InfinityPay, PaggPay, etc.)
+app.post('/api/financeiro/webhook/:gateway', async (req, res) => {
+  try {
+    const gatewayName = req.params.gateway;
+    const payload = req.body;
+    const headers = req.headers;
+
+    const resultado = await gatewayService.processarWebhook(gatewayName, payload, headers);
+    res.status(200).json({ received: true, ...resultado });
+  } catch (err: any) {
+    console.error(`Error processing webhook for gateway ${req.params.gateway}:`, err);
+    res.status(400).json({ error: err.message || 'Falha ao processar webhook do gateway.' });
+  }
+});
+
+// Processamento / Varredura de mensalidades atrasadas
+app.post('/api/financeiro/processar-atrasados', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas Administradores podem executar a verificação de atrasados.' });
+      return;
+    }
+
+    const resultado = await gatewayService.verificarEAtualizarMensalidadesAtrasadas();
+    res.json(resultado);
+  } catch (err: any) {
+    console.error('Error in POST /api/financeiro/processar-atrasados:', err);
+    res.status(500).json({ error: err.message || 'Erro ao processar mensalidades atrasadas.' });
   }
 });
 
@@ -877,28 +1754,61 @@ app.post('/api/equipe', requireAuth, async (req, res) => {
 app.delete('/api/equipe/:id', requireAuth, async (req, res) => {
   try {
     if ((req as any).user?.role !== 'Administrador') {
-      res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+      res.status(403).json({ error: 'Acesso negado. Apenas administradores podem excluir usuários.' });
       return;
     }
     const { id } = req.params;
-    if (isSupabaseConfigured()) {
-      const supabase = getSupabase();
-      
-      const { data: userData } = await supabase.auth.admin.getUserById(id);
-      const userName = userData?.user?.user_metadata?.nome_completo || 'Desconhecido';
-      
-      const { error } = await supabase.auth.admin.deleteUser(id);
-      if (error) throw error;
-      
-      await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.username || 'Sistema'} removeu o usuário ${userName}`, 'Comando Geral');
-      
-      res.json({ success: true });
-    } else {
-      res.status(400).json({ error: 'Banco de dados não configurado para equipe.' });
+
+    // Prevenir que o usuário atual exclua sua própria conta logada
+    const currentUserId = (req as any).user?.id;
+    if (currentUserId && String(currentUserId) === String(id)) {
+      res.status(400).json({ error: 'Não é permitido excluir o próprio usuário logado no momento.' });
+      return;
     }
+
+    let userName = 'Usuário';
+    let deleted = false;
+    let supaErrorMessage = '';
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data: userData, error: fetchErr } = await supabase.auth.admin.getUserById(id);
+        if (userData?.user) {
+          userName = userData.user.user_metadata?.nome_completo || userData.user.email || 'Usuário';
+          const { error } = await supabase.auth.admin.deleteUser(id);
+          if (error) {
+            supaErrorMessage = error.message;
+            throw error;
+          }
+          deleted = true;
+        }
+      } catch (supaErr: any) {
+        console.warn('Supabase delete user notice:', supaErr?.message);
+        supaErrorMessage = supaErr?.message || 'Falha ao remover usuário no Supabase';
+      }
+    }
+
+    try {
+      const stmt = db.prepare('SELECT nome_completo, username FROM equipe_comando WHERE id = ?');
+      const row = stmt.get(id) as any;
+      if (row) {
+        userName = row.nome_completo || row.username || userName;
+        db.prepare('DELETE FROM equipe_comando WHERE id = ?').run(id);
+        deleted = true;
+      }
+    } catch (e) {}
+
+    if (!deleted && isSupabaseConfigured() && supaErrorMessage) {
+      res.status(500).json({ error: `Erro no Supabase: ${supaErrorMessage}` });
+      return;
+    }
+
+    await dataService.addHistorico(0, 'Equipe', `${(req as any).user?.nome || (req as any).user?.username || 'Sistema'} removeu o usuário ${userName}`, 'Comando Geral');
+    
+    res.json({ success: true, message: `Usuário ${userName} excluído com sucesso.` });
   } catch (err: any) {
-    require('fs').appendFileSync('debug_error.log', 'DELETE ERROR: ' + err.message + '\n');
-      console.error('DELETE /api/equipe/:id ERROR:', err);
+    console.error('DELETE /api/equipe/:id ERROR:', err);
     res.status(500).json({ error: err.message || 'Erro ao remover usuário.' });
   }
 });
