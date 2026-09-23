@@ -5,7 +5,8 @@ import { FichaAluno } from './FichaAluno.js';
 import { EquipeComando } from './EquipeComando.js';
 import { ComunicacaoComando } from './ComunicacaoComando.js';
 import { FinanceiroComando } from './FinanceiroComando.js';
-import { Menu, Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, MessageSquare, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files, DollarSign } from 'lucide-react';
+import { CronogramaComando } from './CronogramaComando.js';
+import { Menu, Shield, LogOut, Download, Search, FileText, CheckCircle, Clock, AlertTriangle, Eye, Send, Trash2, X, Key, ExternalLink, Copy, MessageCircle, MessageSquare, Database, User, Users, UserPlus, UserCheck, Clock4, FileWarning, Files, DollarSign, CalendarDays, ArrowRight } from 'lucide-react';
 
 interface ComandoGeralProps {
   onNavigate: (route: string) => void;
@@ -14,12 +15,13 @@ interface ComandoGeralProps {
 export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<'cadastros' | 'equipe' | 'comunicacao' | 'financeiro'>('cadastros');
+  const [activeTab, setActiveTab] = useState<'cadastros' | 'equipe' | 'comunicacao' | 'financeiro' | 'cronograma'>('cadastros');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState('Administrador');
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUsername, setCurrentUsername] = useState<string>('');
   const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [proximoTreinamento, setProximoTreinamento] = useState<any>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -177,8 +179,25 @@ export const ComandoGeral: React.FC<ComandoGeralProps> = ({ onNavigate }) => {
     setCadastros([]);
   };
 
+  const fetchProximoTreinamento = async (tokenOverride?: string) => {
+    try {
+      const token = tokenOverride || localStorage.getItem('inspira_auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/cronograma/proximo', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setProximoTreinamento(data.proximo || null);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar próximo treinamento:', err);
+    }
+  };
+
   const loadCadastros = async (tokenOverride?: string) => {
     setLoading(true);
+    fetchProximoTreinamento(tokenOverride);
     try {
       const token = tokenOverride || localStorage.getItem('inspira_auth_token');
       const headers: Record<string, string> = {};
@@ -637,6 +656,14 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
           </button>
 
           <button 
+            onClick={() => setActiveTab('cronograma')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'cronograma' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+          >
+            <CalendarDays className="w-5 h-5" />
+            <span>Cronograma Anual</span>
+          </button>
+
+          <button 
             onClick={() => setActiveTab('comunicacao')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'comunicacao' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
           >
@@ -749,6 +776,14 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
                 </button>
 
                 <button 
+                  onClick={() => { setActiveTab('cronograma'); setIsMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'cronograma' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
+                >
+                  <CalendarDays className="w-5 h-5" />
+                  <span>Cronograma Anual</span>
+                </button>
+
+                <button 
                   onClick={() => { setActiveTab('comunicacao'); setIsMobileMenuOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition cursor-pointer ${activeTab === 'comunicacao' ? 'bg-[rgba(245,195,59,0.1)] text-[#f5c33b]' : 'text-white hover:bg-[rgba(255,255,255,0.05)]'}`}
                 >
@@ -818,7 +853,13 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
 
       {/* Main Content */}
       <main className="pt-8">
-        {activeTab === 'equipe' ? (
+        {activeTab === 'cronograma' ? (
+          <CronogramaComando
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName || currentUsername}
+          />
+        ) : activeTab === 'equipe' ? (
           <EquipeComando currentUserRole={currentUserRole} />
         ) : activeTab === 'comunicacao' ? (
           <ComunicacaoComando
@@ -873,6 +914,40 @@ Após o envio, nossa equipe dará continuidade ao atendimento.`;
             </button>
             </div>
           </div>
+
+          {/* Card Resumo do Próximo Treinamento (Exclusivo da Equipe) */}
+          {proximoTreinamento && (
+            <div 
+              onClick={() => setActiveTab('cronograma')}
+              className="mb-6 p-4 rounded-2xl bg-[linear-gradient(90deg,rgba(245,195,59,0.08),rgba(15,35,50,0.85))] border border-[#f5c33b]/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-[#f5c33b]/50 transition group shadow-lg"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#f5c33b]/15 border border-[#f5c33b]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <CalendarDays className="w-5 h-5 text-[#f5c33b]" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#f5c33b] block">
+                    Próximo Treinamento Programado
+                  </span>
+                  <h4 className="text-sm sm:text-base font-extrabold text-white group-hover:text-[#f5c33b] transition">
+                    {proximoTreinamento.titulo}
+                  </h4>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 self-end sm:self-center">
+                <div className="text-left sm:text-right text-xs">
+                  <span className="font-extrabold text-white block">
+                    {new Date(proximoTreinamento.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase()} • {proximoTreinamento.horaInicio}
+                  </span>
+                  <span className="text-[#8fa2ad] text-[11px]">{proximoTreinamento.categoria}</span>
+                </div>
+                <span className="px-3 py-1.5 rounded-lg bg-[rgba(255,255,255,0.06)] text-xs font-bold text-white group-hover:bg-[#f5c33b] group-hover:text-[#061018] transition flex items-center gap-1">
+                  <span>Ver cronograma</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Stats Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">

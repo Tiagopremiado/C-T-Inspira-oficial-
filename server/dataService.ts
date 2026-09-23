@@ -348,7 +348,11 @@ export const dataService = {
             nome: data.nome_aluno,
             nomeAluno: data.nome_aluno,
             cidadeAluno: data.cidade_aluno,
-            whatsAluno: data.whats_aluno
+            whatsAluno: data.whats_aluno,
+            responsavel: data.nome_responsavel || '',
+            nomeResponsavel: data.nome_responsavel || '',
+            whatsResponsavel: data.whats_responsavel || data.whats_aluno || '',
+            whats: data.whats_aluno || ''
           };
         }
       } catch (err) {
@@ -364,7 +368,11 @@ export const dataService = {
           nome: row.nome_aluno,
           nomeAluno: row.nome_aluno,
           cidadeAluno: row.cidade_aluno,
-          whatsAluno: row.whats_aluno
+          whatsAluno: row.whats_aluno,
+          responsavel: row.nome_responsavel || '',
+          nomeResponsavel: row.nome_responsavel || '',
+          whatsResponsavel: row.whats_responsavel || row.whats_aluno || '',
+          whats: row.whats_aluno || ''
         };
       }
     } catch (e) {
@@ -2567,5 +2575,657 @@ export const dataService = {
       pagamentosAtrasadosTotal,
       pagamentosAtrasadosQtd
     };
+  },
+
+  // -----------------------------------------------------------
+  // MÓDULO 10: CRONOGRAMA ANUAL DE TREINAMENTOS
+  // -----------------------------------------------------------
+
+  async getCronograma(filters?: {
+    ano?: number;
+    mes?: number;
+    categoria?: string;
+    status?: string;
+    data_inicio?: string;
+    data_fim?: string;
+    search?: string;
+    incluirExcluidos?: boolean;
+  }) {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        let query = supabase.from('cronograma_treinamentos').select('*');
+
+        if (!filters?.incluirExcluidos) {
+          query = query.is('deleted_at', null);
+        }
+
+        if (filters?.categoria && filters.categoria !== 'todas') {
+          query = query.eq('categoria', filters.categoria);
+        }
+
+        if (filters?.status && filters.status !== 'todos') {
+          query = query.eq('status', filters.status);
+        }
+
+        if (filters?.ano) {
+          if (filters?.mes) {
+            const mm = String(filters.mes).padStart(2, '0');
+            const lastDay = new Date(filters.ano, filters.mes, 0).getDate();
+            query = query.gte('data', `${filters.ano}-${mm}-01`).lte('data', `${filters.ano}-${mm}-${lastDay}`);
+          } else {
+            query = query.gte('data', `${filters.ano}-01-01`).lte('data', `${filters.ano}-12-31`);
+          }
+        }
+
+        if (filters?.data_inicio) {
+          query = query.gte('data', filters.data_inicio);
+        }
+
+        if (filters?.data_fim) {
+          query = query.lte('data', filters.data_fim);
+        }
+
+        query = query.order('data', { ascending: true }).order('hora_inicio', { ascending: true });
+
+        const { data, error } = await query;
+        if (!error && data) {
+          let list = data.map((r: any) => ({
+            id: Number(r.id),
+            titulo: r.titulo,
+            data: r.data,
+            horaInicio: r.hora_inicio,
+            horaFim: r.hora_fim || undefined,
+            categoria: r.categoria,
+            local: r.local || '',
+            instrutorResponsavelId: r.instrutor_responsavel_id || null,
+            instrutorResponsavelNome: r.instrutor_responsavel_nome || '',
+            descricao: r.descricao || '',
+            materiais: r.materiais || '',
+            observacoes: r.observacoes || '',
+            status: r.status,
+            criadoPor: r.criado_por,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            deletedAt: r.deleted_at || null
+          }));
+
+          if (filters?.search && filters.search.trim()) {
+            const term = filters.search.toLowerCase().trim();
+            list = list.filter((a: any) =>
+              (a.titulo && a.titulo.toLowerCase().includes(term)) ||
+              (a.categoria && a.categoria.toLowerCase().includes(term)) ||
+              (a.descricao && a.descricao.toLowerCase().includes(term)) ||
+              (a.local && a.local.toLowerCase().includes(term)) ||
+              (a.instrutorResponsavelNome && a.instrutorResponsavelNome.toLowerCase().includes(term))
+            );
+          }
+
+          return list;
+        }
+      } catch (err) {
+        console.warn('Supabase getCronograma failed, fallback to SQLite:', err);
+      }
+    }
+
+    // Fallback SQLite
+    try {
+      let sql = 'SELECT * FROM cronograma_treinamentos WHERE 1=1';
+      const params: any[] = [];
+
+      if (!filters?.incluirExcluidos) {
+        sql += ' AND deleted_at IS NULL';
+      }
+
+      if (filters?.categoria && filters.categoria !== 'todas') {
+        sql += ' AND categoria = ?';
+        params.push(filters.categoria);
+      }
+
+      if (filters?.status && filters.status !== 'todos') {
+        sql += ' AND status = ?';
+        params.push(filters.status);
+      }
+
+      if (filters?.ano) {
+        if (filters?.mes) {
+          const mm = String(filters.mes).padStart(2, '0');
+          const lastDay = new Date(filters.ano, filters.mes, 0).getDate();
+          sql += ' AND data >= ? AND data <= ?';
+          params.push(`${filters.ano}-${mm}-01`, `${filters.ano}-${mm}-${lastDay}`);
+        } else {
+          sql += ' AND data >= ? AND data <= ?';
+          params.push(`${filters.ano}-01-01`, `${filters.ano}-12-31`);
+        }
+      }
+
+      if (filters?.data_inicio) {
+        sql += ' AND data >= ?';
+        params.push(filters.data_inicio);
+      }
+
+      if (filters?.data_fim) {
+        sql += ' AND data <= ?';
+        params.push(filters.data_fim);
+      }
+
+      sql += ' ORDER BY data ASC, hora_inicio ASC';
+
+      const stmt = db.prepare(sql);
+      const rows = (stmt.all ? stmt.all(...params) : []) as any[];
+
+      let list = rows.map((r: any) => ({
+        id: Number(r.id),
+        titulo: r.titulo,
+        data: r.data,
+        horaInicio: r.hora_inicio,
+        horaFim: r.hora_fim || undefined,
+        categoria: r.categoria,
+        local: r.local || '',
+        instrutorResponsavelId: r.instrutor_responsavel_id || null,
+        instrutorResponsavelNome: r.instrutor_responsavel_nome || '',
+        descricao: r.descricao || '',
+        materiais: r.materiais || '',
+        observacoes: r.observacoes || '',
+        status: r.status,
+        criadoPor: r.criado_por,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        deletedAt: r.deleted_at || null
+      }));
+
+      if (filters?.search && filters.search.trim()) {
+        const term = filters.search.toLowerCase().trim();
+        list = list.filter((a: any) =>
+          (a.titulo && a.titulo.toLowerCase().includes(term)) ||
+          (a.categoria && a.categoria.toLowerCase().includes(term)) ||
+          (a.descricao && a.descricao.toLowerCase().includes(term)) ||
+          (a.local && a.local.toLowerCase().includes(term)) ||
+          (a.instrutorResponsavelNome && a.instrutorResponsavelNome.toLowerCase().includes(term))
+        );
+      }
+
+      return list;
+    } catch (e) {
+      console.error('Error fetching SQLite cronograma:', e);
+      return [];
+    }
+  },
+
+  async getCronogramaAulaById(id: number) {
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+          .from('cronograma_treinamentos')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (!error && data) {
+          return {
+            id: Number(data.id),
+            titulo: data.titulo,
+            data: data.data,
+            horaInicio: data.hora_inicio,
+            horaFim: data.hora_fim || undefined,
+            categoria: data.categoria,
+            local: data.local || '',
+            instrutorResponsavelId: data.instrutor_responsavel_id || null,
+            instrutorResponsavelNome: data.instrutor_responsavel_nome || '',
+            descricao: data.descricao || '',
+            materiais: data.materiais || '',
+            observacoes: data.observacoes || '',
+            status: data.status,
+            criadoPor: data.criado_por,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+            deletedAt: data.deleted_at || null
+          };
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+
+    try {
+      const stmt = db.prepare('SELECT * FROM cronograma_treinamentos WHERE id = ?');
+      const r = (stmt.get ? stmt.get(id) : null) as any;
+      if (!r) return null;
+      return {
+        id: Number(r.id),
+        titulo: r.titulo,
+        data: r.data,
+        horaInicio: r.hora_inicio,
+        horaFim: r.hora_fim || undefined,
+        categoria: r.categoria,
+        local: r.local || '',
+        instrutorResponsavelId: r.instrutor_responsavel_id || null,
+        instrutorResponsavelNome: r.instrutor_responsavel_nome || '',
+        descricao: r.descricao || '',
+        materiais: r.materiais || '',
+        observacoes: r.observacoes || '',
+        status: r.status,
+        criadoPor: r.criado_por,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        deletedAt: r.deleted_at || null
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async getProximoTreinamento() {
+    const hoje = new Date().toISOString().split('T')[0];
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+          .from('cronograma_treinamentos')
+          .select('*')
+          .gte('data', hoje)
+          .neq('status', 'Cancelada')
+          .is('deleted_at', null)
+          .order('data', { ascending: true })
+          .order('hora_inicio', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: Number(data.id),
+            titulo: data.titulo,
+            data: data.data,
+            horaInicio: data.hora_inicio,
+            horaFim: data.hora_fim || undefined,
+            categoria: data.categoria,
+            local: data.local || '',
+            instrutorResponsavelNome: data.instrutor_responsavel_nome || '',
+            status: data.status
+          };
+        }
+      } catch (e) {
+        // Fallback SQLite
+      }
+    }
+
+    try {
+      const stmt = db.prepare(`
+        SELECT * FROM cronograma_treinamentos
+        WHERE data >= ? AND status != 'Cancelada' AND deleted_at IS NULL
+        ORDER BY data ASC, hora_inicio ASC
+        LIMIT 1
+      `);
+      const r = (stmt.get ? stmt.get(hoje) : null) as any;
+      if (!r) return null;
+      return {
+        id: Number(r.id),
+        titulo: r.titulo,
+        data: r.data,
+        horaInicio: r.hora_inicio,
+        horaFim: r.hora_fim || undefined,
+        categoria: r.categoria,
+        local: r.local || '',
+        instrutorResponsavelNome: r.instrutor_responsavel_nome || '',
+        status: r.status
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async createCronogramaAula(data: {
+    titulo: string;
+    data: string;
+    horaInicio: string;
+    horaFim?: string;
+    categoria: string;
+    local?: string;
+    instrutorResponsavelId?: string | number | null;
+    instrutorResponsavelNome?: string | null;
+    descricao?: string;
+    materiais?: string;
+    observacoes?: string;
+    status?: string;
+    criadoPor: string;
+  }) {
+    const now = new Date().toISOString();
+    const status = data.status || 'Planejada';
+    let supabaseId: number | null = null;
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        const { data: inserted, error } = await supabase
+          .from('cronograma_treinamentos')
+          .insert({
+            titulo: data.titulo.trim(),
+            data: data.data,
+            hora_inicio: data.horaInicio.trim(),
+            hora_fim: data.horaFim ? data.horaFim.trim() : null,
+            categoria: data.categoria.trim(),
+            local: data.local ? data.local.trim() : null,
+            instrutor_responsavel_id: data.instrutorResponsavelId ? String(data.instrutorResponsavelId) : null,
+            instrutor_responsavel_nome: data.instrutorResponsavelNome ? data.instrutorResponsavelNome.trim() : null,
+            descricao: data.descricao ? data.descricao.trim() : null,
+            materiais: data.materiais ? data.materiais.trim() : null,
+            observacoes: data.observacoes ? data.observacoes.trim() : null,
+            status,
+            criado_por: data.criadoPor,
+            created_at: now,
+            updated_at: now
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error inserting cronograma into Supabase:', error);
+        } else if (inserted) {
+          supabaseId = Number(inserted.id);
+        }
+      } catch (err) {
+        console.error('Supabase cronograma create error:', err);
+      }
+    }
+
+    try {
+      const stmt = db.prepare(`
+        INSERT INTO cronograma_treinamentos (
+          ${supabaseId ? 'id,' : ''}
+          titulo, data, hora_inicio, hora_fim, categoria, local,
+          instrutor_responsavel_id, instrutor_responsavel_nome,
+          descricao, materiais, observacoes, status, criado_por,
+          created_at, updated_at
+        ) VALUES (
+          ${supabaseId ? '?, ' : ''}
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+      `);
+
+      const params = [
+        ...(supabaseId ? [supabaseId] : []),
+        data.titulo.trim(),
+        data.data,
+        data.horaInicio.trim(),
+        data.horaFim ? data.horaFim.trim() : null,
+        data.categoria.trim(),
+        data.local ? data.local.trim() : null,
+        data.instrutorResponsavelId ? String(data.instrutorResponsavelId) : null,
+        data.instrutorResponsavelNome ? data.instrutorResponsavelNome.trim() : null,
+        data.descricao ? data.descricao.trim() : null,
+        data.materiais ? data.materiais.trim() : null,
+        data.observacoes ? data.observacoes.trim() : null,
+        status,
+        data.criadoPor,
+        now,
+        now
+      ];
+
+      const res = stmt.run(...params);
+      const finalId = supabaseId || Number(res.lastInsertRowid);
+
+      // Auditoria
+      try {
+        await this.addHistorico(
+          0,
+          'Sistema' as any,
+          `Aula de cronograma agendada: "${data.titulo}" (${data.categoria}) em ${data.data} às ${data.horaInicio} por ${data.criadoPor}`,
+          data.criadoPor
+        );
+      } catch (e) {}
+
+      return {
+        id: finalId,
+        titulo: data.titulo.trim(),
+        data: data.data,
+        horaInicio: data.horaInicio.trim(),
+        horaFim: data.horaFim ? data.horaFim.trim() : undefined,
+        categoria: data.categoria.trim(),
+        local: data.local ? data.local.trim() : '',
+        instrutorResponsavelId: data.instrutorResponsavelId || null,
+        instrutorResponsavelNome: data.instrutorResponsavelNome ? data.instrutorResponsavelNome.trim() : '',
+        descricao: data.descricao ? data.descricao.trim() : '',
+        materiais: data.materiais ? data.materiais.trim() : '',
+        observacoes: data.observacoes ? data.observacoes.trim() : '',
+        status,
+        criadoPor: data.criadoPor,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null
+      };
+    } catch (e) {
+      console.error('Error inserting SQLite cronograma:', e);
+      throw e;
+    }
+  },
+
+  async updateCronogramaAula(id: number, data: {
+    titulo: string;
+    data: string;
+    horaInicio: string;
+    horaFim?: string;
+    categoria: string;
+    local?: string;
+    instrutorResponsavelId?: string | number | null;
+    instrutorResponsavelNome?: string | null;
+    descricao?: string;
+    materiais?: string;
+    observacoes?: string;
+    status: string;
+  }, usuario: string) {
+    const existing = await this.getCronogramaAulaById(id);
+    if (!existing) {
+      throw new Error('Aula não encontrada no cronograma.');
+    }
+
+    const now = new Date().toISOString();
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        await supabase
+          .from('cronograma_treinamentos')
+          .update({
+            titulo: data.titulo.trim(),
+            data: data.data,
+            hora_inicio: data.horaInicio.trim(),
+            hora_fim: data.horaFim ? data.horaFim.trim() : null,
+            categoria: data.categoria.trim(),
+            local: data.local ? data.local.trim() : null,
+            instrutor_responsavel_id: data.instrutorResponsavelId ? String(data.instrutorResponsavelId) : null,
+            instrutor_responsavel_nome: data.instrutorResponsavelNome ? data.instrutorResponsavelNome.trim() : null,
+            descricao: data.descricao ? data.descricao.trim() : null,
+            materiais: data.materiais ? data.materiais.trim() : null,
+            observacoes: data.observacoes ? data.observacoes.trim() : null,
+            status: data.status,
+            updated_at: now
+          })
+          .eq('id', id);
+      } catch (err) {
+        console.error('Supabase update cronograma warning:', err);
+      }
+    }
+
+    try {
+      const stmt = db.prepare(`
+        UPDATE cronograma_treinamentos SET
+          titulo = ?, data = ?, hora_inicio = ?, hora_fim = ?,
+          categoria = ?, local = ?, instrutor_responsavel_id = ?,
+          instrutor_responsavel_nome = ?, descricao = ?, materiais = ?,
+          observacoes = ?, status = ?, updated_at = ?
+        WHERE id = ?
+      `);
+
+      stmt.run(
+        data.titulo.trim(),
+        data.data,
+        data.horaInicio.trim(),
+        data.horaFim ? data.horaFim.trim() : null,
+        data.categoria.trim(),
+        data.local ? data.local.trim() : null,
+        data.instrutorResponsavelId ? String(data.instrutorResponsavelId) : null,
+        data.instrutorResponsavelNome ? data.instrutorResponsavelNome.trim() : null,
+        data.descricao ? data.descricao.trim() : null,
+        data.materiais ? data.materiais.trim() : null,
+        data.observacoes ? data.observacoes.trim() : null,
+        data.status,
+        now,
+        id
+      );
+
+      // Auditoria se data ou status mudaram
+      let mudancas: string[] = [];
+      if (existing.data !== data.data) {
+        mudancas.push(`data alterada de ${existing.data} para ${data.data}`);
+      }
+      if (existing.horaInicio !== data.horaInicio) {
+        mudancas.push(`horário alterado de ${existing.horaInicio} para ${data.horaInicio}`);
+      }
+      if (existing.status !== data.status) {
+        mudancas.push(`status alterado de "${existing.status}" para "${data.status}"`);
+      }
+
+      if (mudancas.length > 0) {
+        try {
+          await this.addHistorico(
+            0,
+            'Sistema' as any,
+            `Aula do cronograma "${data.titulo}" atualizada por ${usuario}: ${mudancas.join(', ')}.`,
+            usuario
+          );
+        } catch (e) {}
+      }
+
+      return {
+        ...existing,
+        ...data,
+        id,
+        updatedAt: now
+      };
+    } catch (e) {
+      console.error('Error updating SQLite cronograma:', e);
+      throw e;
+    }
+  },
+
+  async updateCronogramaStatus(id: number, status: string, usuario: string) {
+    const existing = await this.getCronogramaAulaById(id);
+    if (!existing) {
+      throw new Error('Aula não encontrada.');
+    }
+
+    const now = new Date().toISOString();
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        await supabase
+          .from('cronograma_treinamentos')
+          .update({ status, updated_at: now })
+          .eq('id', id);
+      } catch (err) {
+        console.error('Supabase update cronograma status warning:', err);
+      }
+    }
+
+    try {
+      const stmt = db.prepare('UPDATE cronograma_treinamentos SET status = ?, updated_at = ? WHERE id = ?');
+      stmt.run(status, now, id);
+
+      // Auditoria
+      try {
+        await this.addHistorico(
+          0,
+          'Sistema' as any,
+          `Status da aula "${existing.titulo}" (${existing.data}) alterado de "${existing.status}" para "${status}" por ${usuario}.`,
+          usuario
+        );
+      } catch (e) {}
+
+      return { success: true, status, id };
+    } catch (e) {
+      console.error('Error updating status in SQLite cronograma:', e);
+      throw e;
+    }
+  },
+
+  async duplicarCronogramaAula(id: number, novaData: string, novoHorario?: string, usuario?: string) {
+    const existing = await this.getCronogramaAulaById(id);
+    if (!existing) {
+      throw new Error('Aula de origem não encontrada para duplicação.');
+    }
+
+    const finalUsuario = usuario || 'Comando Geral';
+
+    const novaAula = await this.createCronogramaAula({
+      titulo: existing.titulo,
+      data: novaData,
+      horaInicio: novoHorario || existing.horaInicio,
+      horaFim: existing.horaFim,
+      categoria: existing.categoria,
+      local: existing.local,
+      instrutorResponsavelId: existing.instrutorResponsavelId,
+      instrutorResponsavelNome: existing.instrutorResponsavelNome,
+      descricao: existing.descricao,
+      materiais: existing.materiais,
+      observacoes: existing.observacoes,
+      status: 'Planejada',
+      criadoPor: finalUsuario
+    });
+
+    try {
+      await this.addHistorico(
+        0,
+        'Sistema' as any,
+        `Aula "${existing.titulo}" duplicada da data ${existing.data} para ${novaData} por ${finalUsuario}.`,
+        finalUsuario
+      );
+    } catch (e) {}
+
+    return novaAula;
+  },
+
+  async deleteCronogramaAula(id: number, usuario: string) {
+    const existing = await this.getCronogramaAulaById(id);
+    if (!existing) {
+      throw new Error('Aula não encontrada para exclusão.');
+    }
+
+    const now = new Date().toISOString();
+
+    // Soft delete
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabase();
+        await supabase
+          .from('cronograma_treinamentos')
+          .update({ deleted_at: now, updated_at: now })
+          .eq('id', id);
+      } catch (err) {
+        console.warn('Supabase delete cronograma warning:', err);
+      }
+    }
+
+    try {
+      const stmt = db.prepare('UPDATE cronograma_treinamentos SET deleted_at = ?, updated_at = ? WHERE id = ?');
+      stmt.run(now, now, id);
+
+      // Auditoria
+      try {
+        await this.addHistorico(
+          0,
+          'Sistema' as any,
+          `Aula "${existing.titulo}" agendada para ${existing.data} foi excluída por ${usuario}.`,
+          usuario
+        );
+      } catch (e) {}
+
+      return { success: true, message: `Aula "${existing.titulo}" excluída com sucesso.` };
+    } catch (e) {
+      console.error('Error soft deleting SQLite cronograma:', e);
+      throw e;
+    }
   }
 };

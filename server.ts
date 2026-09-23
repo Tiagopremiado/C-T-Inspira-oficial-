@@ -1427,6 +1427,275 @@ app.post('/api/financeiro/processar-atrasados', requireAuth, async (req, res) =>
 });
 
 // -------------------------------------------------------------
+// MÓDULO 10: CRONOGRAMA ANUAL DE TREINAMENTOS
+// -------------------------------------------------------------
+
+// Listar aulas do cronograma com filtros opcionais
+app.get('/api/cronograma', requireAuth, async (req, res) => {
+  try {
+    const { ano, mes, categoria, status, data_inicio, data_fim, search } = req.query;
+
+    const aulas = await dataService.getCronograma({
+      ano: ano ? Number(ano) : undefined,
+      mes: mes ? Number(mes) : undefined,
+      categoria: categoria ? String(categoria) : undefined,
+      status: status ? String(status) : undefined,
+      data_inicio: data_inicio ? String(data_inicio) : undefined,
+      data_fim: data_fim ? String(data_fim) : undefined,
+      search: search ? String(search) : undefined
+    });
+
+    res.json({ aulas });
+  } catch (err: any) {
+    console.error('Error in GET /api/cronograma:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar aulas do cronograma.' });
+  }
+});
+
+// Buscar próximo treinamento programado (para card resumo interno)
+app.get('/api/cronograma/proximo', requireAuth, async (req, res) => {
+  try {
+    const proximo = await dataService.getProximoTreinamento();
+    res.json({ proximo });
+  } catch (err: any) {
+    console.error('Error in GET /api/cronograma/proximo:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar próximo treinamento.' });
+  }
+});
+
+// Buscar detalhes de uma aula específica
+app.get('/api/cronograma/:id', requireAuth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const aula = await dataService.getCronogramaAulaById(id);
+    if (!aula) {
+      res.status(404).json({ error: 'Aula não encontrada no cronograma.' });
+      return;
+    }
+    res.json({ aula });
+  } catch (err: any) {
+    console.error('Error in GET /api/cronograma/:id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao buscar aula.' });
+  }
+});
+
+// Criar nova aula no cronograma (Administrador e Secretaria)
+app.post('/api/cronograma', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não têm permissão para criar aulas no cronograma.' });
+      return;
+    }
+
+    const {
+      titulo,
+      data,
+      horaInicio,
+      horaFim,
+      categoria,
+      local,
+      instrutorResponsavelId,
+      instrutorResponsavelNome,
+      descricao,
+      materiais,
+      observacoes,
+      status
+    } = req.body;
+
+    if (!titulo || !titulo.trim()) {
+      res.status(400).json({ error: 'O título da aula é obrigatório.' });
+      return;
+    }
+
+    if (!data || !data.trim()) {
+      res.status(400).json({ error: 'A data da aula é obrigatória.' });
+      return;
+    }
+
+    if (!horaInicio || !horaInicio.trim()) {
+      res.status(400).json({ error: 'O horário de início é obrigatório.' });
+      return;
+    }
+
+    if (!categoria || !categoria.trim()) {
+      res.status(400).json({ error: 'A categoria da aula é obrigatória.' });
+      return;
+    }
+
+    const criadoPor = (req as any).user?.nome || (req as any).user?.username || 'Comando Geral';
+
+    const novaAula = await dataService.createCronogramaAula({
+      titulo: titulo.trim(),
+      data: data.trim(),
+      horaInicio: horaInicio.trim(),
+      horaFim: horaFim ? horaFim.trim() : undefined,
+      categoria: categoria.trim(),
+      local: local ? local.trim() : undefined,
+      instrutorResponsavelId,
+      instrutorResponsavelNome: instrutorResponsavelNome ? instrutorResponsavelNome.trim() : undefined,
+      descricao: descricao ? descricao.trim() : undefined,
+      materiais: materiais ? materiais.trim() : undefined,
+      observacoes: observacoes ? observacoes.trim() : undefined,
+      status: status || 'Planejada',
+      criadoPor
+    });
+
+    res.status(201).json({ success: true, aula: novaAula });
+  } catch (err: any) {
+    console.error('Error in POST /api/cronograma:', err);
+    res.status(500).json({ error: err.message || 'Erro ao criar aula no cronograma.' });
+  }
+});
+
+// Atualizar aula existente (Administrador e Secretaria)
+app.put('/api/cronograma/:id', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não têm permissão para editar aulas no cronograma.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const {
+      titulo,
+      data,
+      horaInicio,
+      horaFim,
+      categoria,
+      local,
+      instrutorResponsavelId,
+      instrutorResponsavelNome,
+      descricao,
+      materiais,
+      observacoes,
+      status
+    } = req.body;
+
+    if (!titulo || !titulo.trim()) {
+      res.status(400).json({ error: 'O título da aula é obrigatório.' });
+      return;
+    }
+
+    if (!data || !data.trim()) {
+      res.status(400).json({ error: 'A data da aula é obrigatória.' });
+      return;
+    }
+
+    if (!horaInicio || !horaInicio.trim()) {
+      res.status(400).json({ error: 'O horário de início é obrigatório.' });
+      return;
+    }
+
+    if (!categoria || !categoria.trim()) {
+      res.status(400).json({ error: 'A categoria da aula é obrigatória.' });
+      return;
+    }
+
+    const usuario = (req as any).user?.nome || (req as any).user?.username || 'Comando Geral';
+
+    const aulaAtualizada = await dataService.updateCronogramaAula(
+      id,
+      {
+        titulo: titulo.trim(),
+        data: data.trim(),
+        horaInicio: horaInicio.trim(),
+        horaFim: horaFim ? horaFim.trim() : undefined,
+        categoria: categoria.trim(),
+        local: local ? local.trim() : undefined,
+        instrutorResponsavelId,
+        instrutorResponsavelNome: instrutorResponsavelNome ? instrutorResponsavelNome.trim() : undefined,
+        descricao: descricao ? descricao.trim() : undefined,
+        materiais: materiais ? materiais.trim() : undefined,
+        observacoes: observacoes ? observacoes.trim() : undefined,
+        status: status || 'Planejada'
+      },
+      usuario
+    );
+
+    res.json({ success: true, aula: aulaAtualizada });
+  } catch (err: any) {
+    console.error('Error in PUT /api/cronograma/:id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao atualizar aula no cronograma.' });
+  }
+});
+
+// Alterar status de uma aula (Administrador e Secretaria)
+app.patch('/api/cronograma/:id/status', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não têm permissão para alterar o status das aulas.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const { status } = req.body;
+
+    if (!status || !['Planejada', 'Confirmada', 'Realizada', 'Cancelada'].includes(status)) {
+      res.status(400).json({ error: 'Status inválido. Deve ser Planejada, Confirmada, Realizada ou Cancelada.' });
+      return;
+    }
+
+    const usuario = (req as any).user?.nome || (req as any).user?.username || 'Comando Geral';
+    const resultado = await dataService.updateCronogramaStatus(id, status, usuario);
+
+    res.json(resultado);
+  } catch (err: any) {
+    console.error('Error in PATCH /api/cronograma/:id/status:', err);
+    res.status(500).json({ error: err.message || 'Erro ao alterar status da aula.' });
+  }
+});
+
+// Duplicar aula para outra data (Administrador e Secretaria)
+app.post('/api/cronograma/:id/duplicar', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role || 'Instrutor';
+    if (role === 'Instrutor') {
+      res.status(403).json({ error: 'Permissão negada. Instrutores não têm permissão para duplicar aulas no cronograma.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const { novaData, novoHorario } = req.body;
+
+    if (!novaData || !novaData.trim()) {
+      res.status(400).json({ error: 'Selecione a nova data para a qual a aula será duplicada.' });
+      return;
+    }
+
+    const usuario = (req as any).user?.nome || (req as any).user?.username || 'Comando Geral';
+    const novaAula = await dataService.duplicarCronogramaAula(id, novaData.trim(), novoHorario?.trim(), usuario);
+
+    res.status(201).json({ success: true, aula: novaAula });
+  } catch (err: any) {
+    console.error('Error in POST /api/cronograma/:id/duplicar:', err);
+    res.status(500).json({ error: err.message || 'Erro ao duplicar aula no cronograma.' });
+  }
+});
+
+// Excluir aula do cronograma (Exclusão lógica — apenas Administrador Geral)
+app.delete('/api/cronograma/:id', requireAuth, async (req, res) => {
+  try {
+    const role = (req as any).user?.role;
+    if (role !== 'Administrador') {
+      res.status(403).json({ error: 'Permissão negada. Apenas o Administrador Geral pode excluir aulas do cronograma.' });
+      return;
+    }
+
+    const id = Number(req.params.id);
+    const usuario = (req as any).user?.nome || (req as any).user?.username || 'Administrador';
+
+    const resultado = await dataService.deleteCronogramaAula(id, usuario);
+    res.json(resultado);
+  } catch (err: any) {
+    console.error('Error in DELETE /api/cronograma/:id:', err);
+    res.status(500).json({ error: err.message || 'Erro ao excluir aula do cronograma.' });
+  }
+});
+
+// -------------------------------------------------------------
 // CADASTROS COMPLETOS
 // -------------------------------------------------------------
 

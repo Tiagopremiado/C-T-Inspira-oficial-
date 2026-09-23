@@ -325,3 +325,34 @@ ALTER TABLE public.financeiro_eventos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Full access to service role on financeiro_eventos" ON public.financeiro_eventos FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon select and manage by service on financeiro_eventos" ON public.financeiro_eventos FOR ALL TO anon USING (true) WITH CHECK (true);
 GRANT ALL ON TABLE public.financeiro_eventos TO postgres, anon, authenticated, service_role;
+
+-- 15. MÓDULO 10: CRONOGRAMA ANUAL DE TREINAMENTOS
+CREATE TABLE IF NOT EXISTS public.cronograma_treinamentos (
+  id BIGSERIAL PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  data DATE NOT NULL,
+  hora_inicio TEXT NOT NULL,
+  hora_fim TEXT,
+  categoria TEXT NOT NULL,
+  local TEXT,
+  instrutor_responsavel_id TEXT,
+  instrutor_responsavel_nome TEXT,
+  descricao TEXT,
+  materiais TEXT,
+  observacoes TEXT,
+  status TEXT NOT NULL DEFAULT 'Planejada' CHECK(status IN ('Planejada', 'Confirmada', 'Realizada', 'Cancelada')),
+  criado_por TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cronograma_data ON public.cronograma_treinamentos(data);
+CREATE INDEX IF NOT EXISTS idx_cronograma_categoria ON public.cronograma_treinamentos(categoria);
+CREATE INDEX IF NOT EXISTS idx_cronograma_status ON public.cronograma_treinamentos(status);
+CREATE INDEX IF NOT EXISTS idx_cronograma_deleted ON public.cronograma_treinamentos(deleted_at);
+
+ALTER TABLE public.cronograma_treinamentos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Full access to service role on cronograma_treinamentos" ON public.cronograma_treinamentos FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon select and manage by service on cronograma_treinamentos" ON public.cronograma_treinamentos FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.cronograma_treinamentos TO postgres, anon, authenticated, service_role;

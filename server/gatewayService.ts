@@ -494,7 +494,7 @@ export const gatewayService = {
         });
 
         await dataService.createFinanceiroEvento({
-          alunoId: aluno.id,
+          alunoId: Number(aluno.id),
           tipoEvento: 'alteração_plano',
           gateway: config.gatewayPagamento || 'manual',
           valor: config.valor,
@@ -503,8 +503,8 @@ export const gatewayService = {
         });
 
         alunosAtualizados.push({
-          alunoId: aluno.id,
-          nome: aluno.nome,
+          alunoId: Number(aluno.id),
+          nome: aluno.nomeAluno || '',
           statusAnterior: config.status
         });
       }

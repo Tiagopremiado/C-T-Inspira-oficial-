@@ -226,3 +226,36 @@ export interface DashboardFinanceiroStats {
   pagamentosAtrasadosTotal: number;
   pagamentosAtrasadosQtd: number;
 }
+
+// MÓDULO 10: CRONOGRAMA ANUAL DE TREINAMENTOS
+export type StatusCronograma = 'Planejada' | 'Confirmada' | 'Realizada' | 'Cancelada';
+
+export interface CronogramaAula {
+  id: number;
+  titulo: string;
+  data: string; // YYYY-MM-DD
+  horaInicio: string; // HH:MM
+  horaFim?: string; // HH:MM
+  categoria: string;
+  local?: string;
+  instrutorResponsavelId?: string | number | null;
+  instrutorResponsavelNome?: string | null;
+  descricao?: string;
+  materiais?: string;
+  observacoes?: string;
+  status: StatusCronograma;
+  criadoPor: string;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+}
+
+export interface FiltrosCronograma {
+  ano?: number;
+  mes?: number;
+  categoria?: string;
+  status?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  busca?: string;
+}

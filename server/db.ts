@@ -42,9 +42,11 @@ class FallbackMemoryDatabase {
   financeiro_eventos: any[] = [];
   aluno_financeiro_config: any[] = [];
   pagamentos: any[] = [];
+  cronograma_treinamentos: any[] = [];
   private nextPreId = 1;
   private nextFullId = 1;
   private nextEventoId = 1;
+  private nextCronogramaId = 1;
 
   constructor() {
     const defaultPassword = process.env.ADMIN_PASSWORD || 'inspira2026';
@@ -415,6 +417,31 @@ try {
       CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_tipo ON financeiro_eventos(tipo_evento);
       CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_gateway ON financeiro_eventos(gateway);
       CREATE INDEX IF NOT EXISTS idx_financeiro_eventos_data ON financeiro_eventos(criado_em);
+      
+      -- MÓDULO 10: CRONOGRAMA ANUAL DE TREINAMENTOS
+      CREATE TABLE IF NOT EXISTS cronograma_treinamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        titulo TEXT NOT NULL,
+        data TEXT NOT NULL,
+        hora_inicio TEXT NOT NULL,
+        hora_fim TEXT,
+        categoria TEXT NOT NULL,
+        local TEXT,
+        instrutor_responsavel_id TEXT,
+        instrutor_responsavel_nome TEXT,
+        descricao TEXT,
+        materiais TEXT,
+        observacoes TEXT,
+        status TEXT NOT NULL DEFAULT 'Planejada',
+        criado_por TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_cronograma_data ON cronograma_treinamentos(data);
+      CREATE INDEX IF NOT EXISTS idx_cronograma_categoria ON cronograma_treinamentos(categoria);
+      CREATE INDEX IF NOT EXISTS idx_cronograma_status ON cronograma_treinamentos(status);
+      CREATE INDEX IF NOT EXISTS idx_cronograma_deleted ON cronograma_treinamentos(deleted_at);
       
     `);
 
